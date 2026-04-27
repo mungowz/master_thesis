@@ -1,0 +1,1076 @@
+% !TEX root = ../main.tex
+\section{Methodological overview}
+
+This section presents an overview of the proposed methodology, with the dual purpose of formalizing the problem setting and introducing the adopted approach. The workflow begins with the representation of the data, proceeds through a local analysis of the model's decision boundary, and culminates in the extraction of global patterns. The theoretical foundations underlying each stage are formalized in the following sections.
+
+\section{Feature-Space Formalization and Classification Setting}
+\label{sec:feature-space-formalization}
+
+Let $\mathcal{D} = \{(\mathbf{x}_i, y_i)\}_{i = 1}^{m}$ be a dataset for a supervised learning task, where:
+
+\begin{itemize}
+  \item $\mathbf{x}_i$ is the $i$-th instance, represented as an $n$-dimensional feature vector, $\mathbf{x}_i = (x_{i1},\ldots,x_{in})$;
+  \item $y_i \in \mathcal{Y}$ is the corresponding class label;
+  \item $(\mathbf{x}_i,y_i)$ denotes one labeled example.
+\end{itemize}
+
+A \emph{feature} $X_j$ is defined as a descriptive variable encoding an observable property of an example. Formally, each instance satisfies $x_{ij} \in X_j \ \forall i,j$. The feature space is modeled as a mixed space composed of numerical and categorical features.
+
+A \emph{numerical} feature is defined as a variable whose values are quantitative measurements on a numeric scale (e.g., counts, amounts, or magnitudes). A \emph{categorical} feature is a variable whose values identify qualitative classes (categories), either without intrinsic order (nominal) or with intrinsic order (ordinal). 
+
+The feature space $\mathcal{X}$ can be seen as:
+
+\begin{equation}
+  \mathcal{X} = \mathcal{X}_{\mathrm{num}} \times \mathcal{X}_{\mathrm{cat}},
+\end{equation}
+
+where $\mathcal{X}_{\mathrm{num}}$ denotes the numerical-feature subspace and $\mathcal{X}_{\mathrm{cat}}$ denotes the categorical-feature subspace. The categorical component is further partitioned into nominal and ordinal subspaces:
+
+\begin{equation}
+  \mathcal{X}_{\mathrm{cat}} = \mathcal{X}_{\mathrm{nom}} \times \mathcal{X}_{\mathrm{ord}}.
+\end{equation}
+
+Hence,
+
+\begin{equation}
+  \mathcal{X} = \mathcal{X}_{\mathrm{num}} \times \mathcal{X}_{\mathrm{nom}} \times \mathcal{X}_{\mathrm{ord}}.
+\end{equation}
+
+The corresponding domains are defined as:
+
+\begin{equation}
+  \mathcal{X}_{\mathrm{num}} \subseteq \mathbb{R}^{n_{\mathrm{num}}},
+  \qquad
+  \mathcal{X}_{\mathrm{nom}} = \mathcal{C}_1^{\mathrm{nom}} \times \cdots \times \mathcal{C}_{n_{\mathrm{nom}}}^{\mathrm{nom}},
+  \qquad
+  \mathcal{X}_{\mathrm{ord}} = \mathcal{C}_1^{\mathrm{ord}} \times \cdots \times \mathcal{C}_{n_{\mathrm{ord}}}^{\mathrm{ord}},
+\end{equation}
+
+where each set $\mathcal{C}_j^{\mathrm{nom}}$ (respectively, $\mathcal{C}_j^{\mathrm{ord}}$) is the set of all admissible categories of the nominal feature (respectively, ordinal feature) $X_j$. Here, $n_{\mathrm{num}}$, $n_{\mathrm{nom}}$, and $n_{\mathrm{ord}}$ denote the numbers of numerical, nominal, and ordinal features, respectively, for each instance, with $n_{\mathrm{num}} + n_{\mathrm{nom}} + n_{\mathrm{ord}} = n$. Accordingly, each instance can be written as
+
+\begin{equation}
+  \mathbf{x}_i = (\mathbf{x}_i^{\mathrm{num}}, \mathbf{x}_i^{\mathrm{nom}}, \mathbf{x}_i^{\mathrm{ord}}),
+\end{equation}
+
+where $\mathbf{x}_i^{\mathrm{num}}$, $\mathbf{x}_i^{\mathrm{nom}}$, and $\mathbf{x}_i^{\mathrm{ord}}$ denote, respectively, the subvectors of numerical, nominal, and ordinal features of the $i$-th instance, with $\mathbf{x}_i^{\mathrm{num}} \in \mathcal{X}_{\mathrm{num}}$, $\mathbf{x}_i^{\mathrm{nom}} \in \mathcal{X}_{\mathrm{nom}}$, and $\mathbf{x}_i^{\mathrm{ord}} \in \mathcal{X}_{\mathrm{ord}}$.
+
+$T(\cdot)$ is defined as a categorization operator that acts only on the numerical component of the feature space, mapping it into an ordinal categorical representation. The source taxonomies used to define category schemes for the categorization of numerical features are shown in Chapter~\ref{cap:data}, Section~\ref{sec:dataset-preparation}:
+
+\begin{equation}
+  T: \mathcal{X}_{\mathrm{num}} \rightarrow \mathcal{X}_{\mathrm{num} \rightarrow \mathrm{ord}},
+\end{equation}
+
+where
+\begin{equation}
+  \mathcal{X}_{\mathrm{num} \rightarrow \mathrm{ord}} = \mathcal{C}_1^{\mathrm{num} \rightarrow \mathrm{ord}} \times \cdots \times \mathcal{C}_{n_{\mathrm{num} \rightarrow \mathrm{ord}}}^{\mathrm{num} \rightarrow \mathrm{ord}}.
+\end{equation}
+
+Here, $n_{\mathrm{num} \rightarrow \mathrm{ord}}$ is the number of ordinal features obtained after categorization. Since the operator $T$ maps each original numerical feature to a single ordinal feature, $n_{\mathrm{num} \rightarrow \mathrm{ord}} = n_{\mathrm{num}}$, and therefore $n_{\mathrm{num} \rightarrow \mathrm{ord}} + n_{\mathrm{nom}} + n_{\mathrm{ord}} = n_{\mathrm{cat}} = n$, where $n_{\mathrm{cat}}$ denotes the total number of features in the resulting fully categorical dataset. Moreover, $\mathbf{x}_i^{\mathrm{num} \rightarrow \mathrm{ord}}$ denotes the categorized ordinal subvector for instance $i$. Accordingly, for each instance $\mathbf{x}_i = (\mathbf{x}_i^{\mathrm{num}},\mathbf{x}_i^{\mathrm{nom}},\mathbf{x}_i^{\mathrm{ord}})$, one obtains
+
+\begin{equation}
+  \tilde{\mathbf{x}}_i = (T(\mathbf{x}_i^{\mathrm{num}}),\mathbf{x}_i^{\mathrm{nom}},\mathbf{x}_i^{\mathrm{ord}})
+  = (\mathbf{x}_i^{\mathrm{num} \rightarrow \mathrm{ord}},\mathbf{x}_i^{\mathrm{nom}},\mathbf{x}_i^{\mathrm{ord}}),
+\end{equation}
+
+where $\tilde{\mathbf{x}}_i$ is the fully categorical instance obtained after categorization, with $\tilde{\mathbf{x}}_i \in \widetilde{\mathcal{X}} = \mathcal{X}_{\mathrm{num} \rightarrow \mathrm{ord}} \times \mathcal{X}_{\mathrm{nom}} \times \mathcal{X}_{\mathrm{ord}}$. The dataset after categorization is defined as $\widetilde{\mathcal{D}} = \{(\tilde{\mathbf{x}}_i, y_i)\}_{i = 1}^{m}$, where all features are categorical.
+
+Since all features are transformed into categorical variables, in the remainder of this thesis they are referred to simply as \emph{features}. Under this convention, $\tilde{\mathbf{x}}_i$ denotes the $i$-th categorical instance, while $X_j$ denotes the $j$-th categorical feature. For each index $j$, let $\mathcal{C}_j$ be the set of admissible categories for $X_j$, with cardinality $p_j = |\mathcal{C}_j|$. Any admissible category for $X_j$ is denoted by $c_{jk} \in \mathcal{C}_j$, with $k \in \{1, \ldots, p_j\}$. The notation $x_{ij} = c_{jk}$ indicates that the value of the $j$-th feature for the $i$-th instance corresponds to the category $c_{jk} \in \mathcal{C}_j$.
+
+In this context, the dataset is represented in \emph{tabular} form: each row corresponds to one example, while each column corresponds either to a feature or to the label associated with that instance. The objective is a classification task, i.e., learning a mapping from the feature space to a discrete label space. In the general multiclass case, $\mathcal{Y} = \{1,\dots,H\}$, where $H \in \mathbb{N}$, $H \geq 2$, and $H$ denotes the number of possible classes. In this specific setting the binary case is addressed, with label space $\mathcal{Y} = \{0,1\}$.
+
+A classifier is a function that assigns one class to each input instance:
+
+\begin{equation}
+  f: \widetilde{\mathcal{X}} \rightarrow \mathcal{Y}.
+\end{equation}
+
+Given an instance $\tilde{\mathbf{x}}_i$, the model prediction is defined as
+
+\begin{equation}
+  \hat{y}_i = f(\tilde{\mathbf{x}}_i), \qquad \hat{y}_i \in \mathcal{Y}.
+\end{equation}
+
+Here, $\hat{y}_i$ is the predicted label, while $y_i$ is the true label (ground truth).
+
+Given a sufficient amount of data, a dataset is typically partitioned into three disjoint subsets: a training set, a validation set, and a test set. The training set is used to fit the different candidate models; the validation set is used to tune parameters and select the best model; and the test set is used exclusively to assess the final performance of the selected model on unseen data. In the experimental setting of this thesis, however, the primary objective is to understand the classifier's decision logic via counterfactual explanations and to identify the optimal parameter configurations, rather than merely evaluating its final predictive performance. Accordingly, only two subsets are used: a training set and a validation set. Specifically, an $80\%-20\%$ split is used: $80\%$ of the data is used for training and $20\%$ for validation. After this split, the true labels $y_i$ in the training set are used together with the corresponding inputs to learn the mapping $f: \widetilde{\mathcal{X}} \rightarrow \mathcal{Y}$. Conversely, the validation set is actively used to explore the parameter space and select the best model configuration. Once the best model has been chosen, the training data are used to generate the counterfactual decisions and to explore the neighborhood of each training instance, rendering a dedicated test set unnecessary for the scope of this work.
+
+\section{Hybrid Encoding and Unified Manhattan Distance}
+\label{sec:hybrid-encoding-distance}
+
+After discretization, the resulting dataset is entirely categorical. A hybrid encoding strategy is adopted for nominal and ordinal columns that accounts for the ordering of the latter.
+
+\paragraph{Nominal features.} Each nominal feature $x^{\mathrm{nom}}_{ij}$ is encoded through one-hot encoding (e.g., employer type, marital status, occupation, sex). If $\mathcal{C}_j$ denotes the set of admissible categories for the $j$-th nominal feature, then $x^{\mathrm{nom}}_{ij}$ is mapped to a binary vector of length $p_j$ with exactly one active bit. If $\mathcal{C}_j = \{c_{j1},\ldots,c_{j,p_j}\}$, when $x^{\mathrm{nom}}_{ij} = c_{j1}$ then $\mathrm{one\_hot}(x^{\mathrm{nom}}_{ij}) = (1,0,\dots,0)$, when $x^{\mathrm{nom}}_{ij} = c_{j2}$ then $\mathrm{one\_hot}(x^{\mathrm{nom}}_{ij}) = (0,1,\dots,0)$, $\dots$, when $x^{\mathrm{nom}}_{ij} = c_{j,p_j}$ then $\mathrm{one\_hot}(x^{\mathrm{nom}}_{ij}) = (0,0,\dots,1)$.
+
+For nominal data, Hamming distance is used, i.e., the number of positions in which two one-hot encoded vectors differ. Equivalently, if $d_{\mathrm{Ham}}(\cdot,\cdot)$ denotes the Hamming distance, let $\tilde{\mathbf{x}}_a$ and $\tilde{\mathbf{x}}_b$ be two distinct instances, and consider the same nominal feature $j$ in both instances, namely $x^{\mathrm{nom}}_{aj}$ and $x^{\mathrm{nom}}_{bj}$. Then $\mathrm{one\_hot}(x^{\mathrm{nom}}_{aj})$ and $\mathrm{one\_hot}(x^{\mathrm{nom}}_{bj})$ denote the corresponding one-hot vectors, and
+
+\begin{equation}
+  d_{\mathrm{Ham}}\!\left(\mathrm{one\_hot}(x^{\mathrm{nom}}_{aj}),\mathrm{one\_hot}(x^{\mathrm{nom}}_{bj})\right) \in \{0,2\},
+\end{equation}
+
+denotes the Hamming distance between them. The notation $\mathrm{one\_hot}(x^{\mathrm{nom}}_{ij})$ denotes the binary vector associated with category $x^{\mathrm{nom}}_{ij}$, with length $p_j$, exactly one component equal to $1$, and all others equal to $0$. Hence, the Hamming distance is simply the number of bits with different values in the two one-hot vectors. In a single one-hot block with mutually exclusive categories, this yields:
+
+\begin{itemize}
+  \item distance $0$ if the category is the same (identical active-bit position);
+  \item distance $2$ if the category is different (the active bit moves from one position to another, so exactly two positions differ).
+\end{itemize}
+
+Hence, for each nominal feature, the unnormalized mismatch takes values in $\{0,2\}$. This equivalence can also be stated directly through the Manhattan distance, since, in the specific case of one-hot vectors, and more generally of any binary vectors, the Manhattan distance coincides exactly with the Hamming distance. Let $\mathbb{I}(\cdot)$ denote the standard indicator function, which evaluates to $1$ if the condition provided as its argument is true, and $0$ otherwise. Using this operator, the Manhattan distance between the one-hot representations of two nominal values $x^{\mathrm{nom}}_{aj}$ and $x^{\mathrm{nom}}_{bj}$ can be explicitly written by summing over all admissible categories $c_{jk} \in \mathcal{C}_j$:
+
+\begin{equation}
+  d_{\mathrm{Man}}\!\left(\mathrm{one\_hot}(x^{\mathrm{nom}}_{aj}), \mathrm{one\_hot}(x^{\mathrm{nom}}_{bj})\right) = \sum_{c_{jk} \in \mathcal{C}_j} \bigl | \mathbb{I}(x^{\mathrm{nom}}_{aj} = c_{jk}) - \mathbb{I}(x^{\mathrm{nom}}_{bj} = c_{jk}) \bigr |.
+\end{equation}
+
+Indeed, each term in the sum contributes $1$ to the Manhattan distance if and only if the two instances have different active bits for that specific feature $X_j$, and contributes $0$ otherwise. Therefore, summing the absolute differences over all categories yields exactly the number of positions in which the two binary vectors differ.
+
+In particular, if the two one-hot vectors coincide, then all coordinate-wise differences are equal to $0$, so that both $d_{\mathrm{Man}}$ and $d_{\mathrm{Ham}}$ are equal to $0$. Conversely, if the two one-hot vectors correspond to two different categories, then exactly two coordinates differ: one coordinate contributes $|1-0|=1$ and another contributes $|0-1|=1$, while all remaining coordinates contribute $0$, so, $d_{\mathrm{Man}}\!\left(\mathrm{one\_hot}(x^{\mathrm{nom}}_{aj}),\mathrm{one\_hot}(x^{\mathrm{nom}}_{bj})\right)=2$, exactly as for the Hamming distance. Therefore, the distance between two one-hot encoded instances can be computed by means of the Manhattan distance and, to normalize its contribution from $\{0,2\}$ to $\{0,1\}$, each one-hot vector is scaled by $1/2$. Accordingly, for each nominal feature the following encoding is defined:
+
+\begin{equation}
+  \mathrm{nom\_enc}(x^{\mathrm{nom}}_{ij}) = 0.5 \cdot \mathrm{one\_hot}(x^{\mathrm{nom}}_{ij}),
+\end{equation}
+
+\medskip
+
+\noindent\textbf{Example (nominal only).} Let $\mathcal{C}_j = \{c_1,c_2,c_3\}$ and consider two instances $\tilde{\mathbf{x}}_a$ and $\tilde{\mathbf{x}}_b$ such that $x^{\mathrm{nom}}_{aj} = c_1$ and $x^{\mathrm{nom}}_{bj} = c_3$. Their one-hot representations are
+
+\begin{equation}
+  \mathrm{one\_hot}(x^{\mathrm{nom}}_{aj}) = (1,0,0), \qquad \mathrm{one\_hot}(x^{\mathrm{nom}}_{bj}) = (0,0,1).
+\end{equation}
+The Manhattan distance on this unscaled block is therefore
+\begin{equation}
+  d_{\mathrm{Man}}\!\left(\mathrm{one\_hot}(x^{\mathrm{nom}}_{aj}),\mathrm{one\_hot}(x^{\mathrm{nom}}_{bj})\right) = 2.
+\end{equation}
+After scaling by $1/2$,
+\begin{equation}
+  \mathrm{nom\_enc}(x^{\mathrm{nom}}_{aj}) = (0.5,0,0), \qquad \mathrm{nom\_enc}(x^{\mathrm{nom}}_{bj}) = (0,0,0.5).
+\end{equation}
+Evaluating the Manhattan distance on these scaled encodings yields
+\begin{equation}
+  d_{\mathrm{Man}}\!\left(\mathrm{nom\_enc}(x^{\mathrm{nom}}_{aj}),\mathrm{nom\_enc}(x^{\mathrm{nom}}_{bj})\right) = 1.
+\end{equation}
+
+Hence, each nominal-feature distance contribution is within $\{0,1\}$.
+
+\paragraph{Ordinal features.} These variables have a natural order induced by their semantics (e.g., age band, education level, weekly hours worked; low $\prec$ medium $\prec$ high). This category includes both originally ordinal variables, denoted by $x^{\mathrm{ord}}_{ij}$, and numerical variables that have been categorized and transformed into ordinal categorical variables, denoted by $x^{\mathrm{num \rightarrow ord}}_{ij}$. In the adopted pipeline, this order is defined upstream from source taxonomies and metadata during data construction (Chapter~\ref{cap:data}, Section~\ref{sec:discretization}). Each ordinal feature is therefore encoded through rank encoding, so that each category is mapped to an integer index that preserves the original order. If the ordered categories of the $j$-th ordinal feature are $(c_{j1} \prec c_{j2} \prec \dots \prec c_{j,p_j})$, when $x^{\mathrm{ord}}_{ij} = c_{j1}$ then $\mathrm{rank}(x^{\mathrm{ord}}_{ij}) = 1$, when $x^{\mathrm{ord}}_{ij} = c_{j2}$ then $\mathrm{rank}(x^{\mathrm{ord}}_{ij}) = 2$, $\dots$, when $x^{\mathrm{ord}}_{ij} = c_{j,p_j}$ then $\mathrm{rank}(x^{\mathrm{ord}}_{ij}) = p_j$, and analogously for $x^{\mathrm{num \rightarrow ord}}_{ij}$.
+
+For ordinal columns as well, Manhattan distance is used, i.e., the absolute difference between encoded values. Equivalently, for two instances $\tilde{\mathbf{x}}_a$ and $\tilde{\mathbf{x}}_b$ and the same $j$-th ordinal feature, one writes $d_{\mathrm{Man}}\!\left(\mathrm{rank}(x^{\mathrm{ord}}_{aj}),\mathrm{rank}(x^{\mathrm{ord}}_{bj})\right) = \left|\mathrm{rank}(x^{\mathrm{ord}}_{aj})-\mathrm{rank}(x^{\mathrm{ord}}_{bj})\right|$. Unlike the nominal case, this distance can take intermediate values across its admissible range, thereby preserving the magnitude of ordinal discrepancies. For example, the difference between rank $1$ and rank $2$ is smaller than the difference between rank $1$ and rank $5$, allowing the metric to distinguish adjacent categories from more distant ones.
+
+The same encoding applies to categorized numerical features of type $x^{\mathrm{num \rightarrow ord}}_{ij}$, namely $d_{\mathrm{Man}}\!\left(\mathrm{rank}(x^{\mathrm{num \rightarrow ord}}_{aj}),\mathrm{rank}(x^{\mathrm{num \rightarrow ord}}_{bj})\right) = \left|\mathrm{rank}(x^{\mathrm{num \rightarrow ord}}_{aj})-\mathrm{rank}(x^{\mathrm{num \rightarrow ord}}_{bj})\right|$. To avoid overweighting features with more admissible categories and to ensure values lie in $[0,1]$, min-max scaling is applied to the rank encoding of either $x^{\mathrm{ord}}_{ij}$ or $x^{\mathrm{num \rightarrow ord}}_{ij}$. Denoting by $\mathrm{rank}_{\min}^{(j)}=1$ and $\mathrm{rank}_{\max}^{(j)}=p_j$ the minimum and maximum rank values of the $j$-th ordinal feature, the encoding reads
+
+\begin{equation}
+  \mathrm{ord\_enc}(x^{\mathrm{ord}}_{ij}) \; = \; \frac{\mathrm{rank}(x^{\mathrm{ord}}_{ij})-\mathrm{rank}_{\min}^{(j)}}{\mathrm{rank}_{\max}^{(j)}-\mathrm{rank}_{\min}^{(j)}} \; = \; \frac{\mathrm{rank}(x^{\mathrm{ord}}_{ij})-1}{p_j - 1},
+\end{equation}
+
+\medskip
+
+\noindent\textbf{Example (ordinal only).} Consider two instances $\tilde{\mathbf{x}}_a$ and $\tilde{\mathbf{x}}_b$ on the same $j$-th ordinal feature, with four possible ordered categories $(c_{j1} \prec c_{j2} \prec c_{j3} \prec c_{j4})$ and $p_j = 4$. Suppose that $x^{\mathrm{ord}}_{aj} = c_{j2}$ and $x^{\mathrm{ord}}_{bj} = c_{j4}$. Then
+
+\begin{equation}
+  \mathrm{rank}(x^{\mathrm{ord}}_{aj}) = 2, \qquad \mathrm{rank}(x^{\mathrm{ord}}_{bj}) = 4.
+\end{equation}
+
+After min-max normalization,
+
+\begin{equation}
+  \mathrm{ord\_enc}(x^{\mathrm{ord}}_{aj}) = \frac{2-1}{4-1} = \frac{1}{3}, \qquad \mathrm{ord\_enc}(x^{\mathrm{ord}}_{bj}) = \frac{4-1}{4-1} = 1.
+\end{equation}
+
+The Manhattan distance on this ordinal feature is therefore
+
+\begin{equation}
+  d_{\mathrm{Man}}\!\left(\mathrm{ord\_enc}(x^{\mathrm{ord}}_{aj}),\mathrm{ord\_enc}(x^{\mathrm{ord}}_{bj})\right)  = \left|\frac{1}{3}-1\right| = \frac{2}{3}.
+\end{equation}
+
+Hence, each ordinal-feature contribution lies in $[0,1]$.
+
+\paragraph{Overall distance.} Since the distance contribution of both nominal and ordinal features has been formulated to rely on the Manhattan distance and to fall within the $[0,1]$ range per feature, the overall distance between two instances can be computed as a single global Manhattan distance. Let $\mathrm{enc}(\tilde{x}_{ij})$ denote the encoded representation of the $j$-th feature for instance $i$, applying either $\mathrm{nom\_enc}(\cdot)$ or $\mathrm{ord\_enc}(\cdot)$ depending on the feature type. The overall distance between two instances $\tilde{\mathbf{x}}_a$ and $\tilde{\mathbf{x}}_b$ is defined as the sum of the feature-wise Manhattan distances:
+
+\begin{equation}
+  d_{\mathrm{Man}}(\tilde{\mathbf{x}}_a, \tilde{\mathbf{x}}_b) = \sum_{j=1}^{n_{\mathrm{cat}}} d_{\mathrm{Man}}\!\left(\mathrm{enc}(\tilde{x}_{aj}), \mathrm{enc}(\tilde{x}_{bj})\right).
+\end{equation}
+
+Because each of the $n_{\mathrm{cat}}$ features contributes at most $1$ to the total sum, it immediately follows that the overall distance is bounded by the total number of features, i.e., $d_{\mathrm{Man}}(\tilde{\mathbf{x}}_a, \tilde{\mathbf{x}}_b) \in [0, n_{\mathrm{cat}}]$. Equivalently, by conceptually concatenating all the encoded components into a single extended numerical vector, this sum corresponds exactly to the standard Manhattan distance evaluated on the full feature space. This unified formulation provides a single efficient distance measure for both nominal and ordinal features. At the same time, for ordinal variables it preserves the magnitude of rank differences, distinguishing, for example, a change from rank $1$ to rank $2$ from a change from rank $1$ to rank $5$. The implementation details are discussed in the appendix chapter \emph{Pipeline Implementation Details} (Section~\ref{app:parallelization}).
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Summary of encoding choices and distance definitions in this section.}
+\label{tab:encoding-distance-summary}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.19\textwidth} >{\raggedright\arraybackslash}p{0.26\textwidth} >{\raggedright\arraybackslash}p{0.25\textwidth} >{\raggedright\arraybackslash}p{0.18\textwidth}}
+    \toprule
+    \textbf{Feature type} & \textbf{Encoding} & \textbf{Per-feature distance} & \textbf{Range} \\
+    \midrule
+    Nominal (raw) & One-hot in $\{0,1\}$ & Manhattan (or Hamming) on one-hot block ($0$ if same, $2$ otherwise) & $\{0,2\}$ \\
+    Nominal (adopted) & $\mathrm{nom\_enc}(\cdot) = 0.5 \cdot \mathrm{one\_hot}(\cdot)$ & Manhattan on the scaled one-hot block & $\{0,1\}$ \\
+    Ordinal & Rank encoding + min-max scaling & Manhattan via $\mathrm{ord\_enc}(\cdot)$ on normalized ranks & $[0,1]$ \\
+    Ordinal from numerical & Categorized numerical variable + min-max scaled rank & Manhattan via $\mathrm{ord\_enc}(\cdot)$ & $[0,1]$ \\
+    Overall distance & Full encoded vector representation & Global Manhattan distance $d_{\mathrm{Man}}(\tilde{\mathbf{x}}_a, \tilde{\mathbf{x}}_b)$ & $[0, n_{\mathrm{cat}}]$ \\
+    \bottomrule
+  \end{tabular}
+  \renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    >=Stealth,
+    box/.style={rectangle, draw=gray!50, fill=gray!10, thick, rounded corners, text width=3.2cm, align=center, minimum height=1.2cm, font=\small},
+    op/.style={rectangle, draw=blue!50, fill=blue!5, thick, text width=3cm, align=center, minimum height=0.8cm, font=\footnotesize},
+    final/.style={rectangle, draw=green!50, fill=green!5, thick, rounded corners, text width=8cm, align=center, minimum height=1.2cm, font=\small}
+  ]
+    \node[box, text width=4cm] (data) at (0,0) {Original Dataset $\mathcal{D}$};
+    \node[box] (nom) at (-4.5,-2.2) {Nominal Features \\ ($\mathcal{X}_{\mathrm{nom}}$)};
+    \node[box] (num) at (0,-2.2) {Numerical Features \\ ($\mathcal{X}_{\mathrm{num}}$)};
+    \node[box] (ord) at (4.5,-2.2) {Ordinal Features \\ ($\mathcal{X}_{\mathrm{ord}}$)};
+    \node[op] (cat) at (0,-4) {Categorization $T(\cdot)$};
+    \node[op] (onehot) at (-4.5,-5.5) {One-Hot Enc. $\times$ 0.5};
+    \node[op] (rank) at (4.5,-5.5) {Rank Enc. + Min-Max};
+    \node[final] (global) at (0,-7.5) {Categorical Representation $\tilde{\mathbf{x}}_i$ \\[1ex] Global Manhattan Distance $d_{\mathrm{Man}} \in [0, n_{\mathrm{cat}}]$};
+    \draw[->, thick, rounded corners] (data.south) -- (0,-1.1) -| (nom.north);
+    \draw[->, thick] (data.south) -- (num.north);
+    \draw[->, thick, rounded corners] (data.south) -- (0,-1.1) -| (ord.north);
+    \draw[->, thick] (nom.south) -- (onehot.north);
+    \draw[->, thick] (num.south) -- (cat.north);
+    \draw[->, thick, rounded corners] (cat.south) |- node[above, font=\scriptsize, near end, xshift=-1cm] {ordinal mapping} (rank.west);
+    \draw[->, thick] (ord.south) -- (rank.north);
+    \draw[->, thick, rounded corners] (onehot.south) |- (global.west);
+    \draw[->, thick, rounded corners] (rank.south) |- (global.east);
+  \end{tikzpicture}
+  \caption{Hybrid encoding workflow and feature space formalization.}
+  \label{fig:hybrid-encoding}
+\end{figure}
+
+\section{BoCSoR: Method and Differences from Prior Work}
+\label{sec:bocsor-method-prior-work}
+
+This section first summarizes the BoCSoR method from which the present work takes inspiration, using the notation introduced in this thesis, and then describes how that method is adapted to the present setting and for which purpose it is used in the proposed pipeline.
+
+\subsection{Original BoCSoR Method}
+
+The methodological inspiration of this work is the approach presented in the paper \emph{From Local Counterfactuals to Global Feature Importance}~\cite{alfeo2023bocsor}. Since the original BoCSoR method is defined for purely continuous numerical features, in this subsection the feature space is temporarily restricted to its continuous numerical component, assuming $\mathcal{X} = \mathcal{X}_{\mathrm{num}}$. Consequently, each instance is explicitly treated as a fully numerical vector $\mathbf{x}^{\mathrm{num}}_i \in \mathcal{X}_{\mathrm{num}}$. Moreover, for simplicity and in line with the setting adopted in this thesis, the method is described in the binary-classification case $\mathcal{Y}=\{0,1\}$. The adaptation of this notion to the present setting, where all working features are categorical after the preprocessing step, is discussed in the next subsection.
+
+BoCSoR belongs to a line of research in explainable artificial intelligence (XAI) that aims to explain the behavior of a trained classifier while treating it as a black box, that is, without relying on access to its internal structure. Let $\mathcal{D}=\{(\mathbf{x}^{\mathrm{num}}_i,y_i)\}_{i=1}^m$ denoted as the numerical dataset and let $f:\mathcal{X}_{\mathrm{num}}\rightarrow\mathcal{Y}$ be a generic classifier trained on the training set. From this perspective, the goal of the method is not to assess predictive performance on unseen data, but to explain the decision rule learned by the model from the data used during fitting. For this reason, the method is applied only to training instances, since these are the examples from which the classifier has learned the decision boundary that the explanation procedure aims to characterize. For a given class $y \in \mathcal{Y}$, let $\mathcal{D}_y$ denote the subset of training instances belonging to that class, defined as
+
+\begin{equation}
+  \mathcal{D}_y = \{ \mathbf{x}^{\mathrm{num}}_i \mid (\mathbf{x}^{\mathrm{num}}_i, y_i) \in \mathcal{D}, \; y_i = y \}.
+\end{equation}
+
+Since $\mathcal{Y}=\{0,1\}$, the set $\mathcal{D}_{1-y}$ analogously denotes the subset of training instances belonging to the opposite class. To make the two roles explicit in the remainder of this subsection, an instance belonging to the reference class is denoted by $\mathbf{x}^{\mathrm{num}, y}_i \in \mathcal{D}_y$, whereas an instance belonging to the opposite class is denoted by $\mathbf{x}^{\mathrm{num}, 1-y}_r \in \mathcal{D}_{1-y}$. Here, the superscripts $y$ and $1-y$ identify the class-specific subset to which the instance belongs, while the indices $i$ and $r$ distinguish generic elements within those two subsets.
+Then, for each class $y \in \mathcal{Y}$ and for each instance $\mathbf{x}^{\mathrm{num}, y}_i \in \mathcal{D}_{y}$, all Euclidean distances $d_{\mathrm{eucl}}(\cdot \, , \cdot)$ from $\mathbf{x}^{\mathrm{num}, y}_i$ to all instances belonging to $\mathcal{D}_{1-y}$ are computed, namely:
+
+\begin{equation}
+  d_{\mathrm{eucl}}\!\left(\mathbf{x}^{\mathrm{num}, y}_i, \mathbf{x}^{\mathrm{num}, 1-y}_r\right), \qquad \forall \, r \in \{1, \ldots, |\mathcal{D}_{1-y}|\}.
+\end{equation}
+
+Among these distances, the minimum one $\delta_i^{y}$ for each instance $\mathbf{x}^{\mathrm{num}, y}_i \in \mathcal{D}_{y}$ is selected. Therefore, the minimum distance $\delta_i^{y}$ is defined as
+
+\begin{equation}
+  \delta_i^{y} = \min_{r \in \{1, \ldots, |\mathcal{D}_{1-y}|\}} d_{\mathrm{eucl}}\!\left(\mathbf{x}^{\mathrm{num}, y}_i, \mathbf{x}^{\mathrm{num}, 1-y}_r\right).
+\end{equation}
+
+Accordingly, for a fixed class $y \in \mathcal{Y}$, the set of such minimum distances is collected in
+
+\begin{equation}
+  \Delta_{y} = \left\{ \delta_i^{y} \, \middle| \, \mathbf{x}^{\mathrm{num}, y}_i \in \mathcal{D}_{y} \right\},
+\end{equation}
+
+so that $\Delta_y$ contains, for each instance in $\mathcal{D}_{y}$, the distance from that instance to the nearest instance of the opposite class. 
+
+Let $\tau_p$ denote a threshold corresponding to a chosen empirical percentile computed on the set of distances $\Delta_{y}$. The set of \emph{boundary points} for a given class, denoted by $\mathcal{B}_y$, is defined as the collection of pairs $(\mathbf{x}^{\mathrm{num}, y}_i, \mathbf{x}^{\mathrm{num}, 1-y}_r)$, denoted here as boundary pairs, whose associated minimum distance $\delta_i^y \in \Delta_y$ is less than or equal to this threshold, namely:
+
+\begin{equation}
+  \mathcal{B}_y = \left\{ \left(\mathbf{x}^{\mathrm{num}, y}_i, \mathbf{x}^{\mathrm{num}, 1-y}_r\right) \, \middle| \, \delta_i^y \in \Delta_y,\; \delta_i^y \leq \tau_p \right\}.
+\end{equation}
+
+These are called boundary points precisely because they are the instances lying closest to the decision boundary; accordingly, they are also the instances for which the classifier is most uncertain, or equivalently, those on which it has the lowest confidence.  
+
+Before continuing with the description of the method, it is useful to clarify what is meant by a \emph{counterfactual} in the literature~\cite{wachter2017counterfactual}. Let $\mathbf{x}^{\mathrm{num}, y}_i$ be a generic fully numerical continuous instance. Its corresponding counterfactual, denoted by $\mathbf{x}_i^{\mathrm{num}, 1-y, CF}$, is an instance belonging to the opposite class whose difference with respect to $\mathbf{x}^{\mathrm{num}, y}_i$, in terms of feature values, is minimal. 
+
+Given a boundary pair $(\mathbf{x}^{\mathrm{num, y}}_i, \mathbf{x}^{\mathrm{num, 1-y}}_i)$, the method employed by BoCSoR to find the counterfactual $\mathbf{x}_i^{\mathrm{num}, 1-y, CF}$ of $\mathbf{x}^{\mathrm{num}, y}_i$ begins by drawing an imaginary line in the feature space between the two instances. This line is then sampled at 5 equally spaced points. Starting from the point closest to $\mathbf{x}^{\mathrm{num, 1-y}}_i$, the algorithm creates a new synthetic instance via linear interpolation. To determine whether this instance belongs to class $y$ or $1-y$, it is evaluated by the pre-trained classifier. 
+
+If the predicted class for the new synthetic instance is $y$, then the original boundary instance $\mathbf{x}^{\mathrm{num, 1-y}}_i$ is chosen directly as the counterfactual. Otherwise, a new synthetic instance is generated and evaluated at the next point along the line. This process continues until an instance classified as class $y$ is found, at which point the synthetic instance generated in the immediately preceding step is selected as the counterfactual. If the process reaches the final point on the line before $\mathbf{x}^{\mathrm{num, y}}_i$ and predicts it to belong to class $1-y$, that final point is considered the counterfactual. 
+
+In this way, BoCSoR successfully identifies an instance belonging to class $1-y$ (whether original or synthetic) that is closest to the instance $\mathbf{x}^{\mathrm{num, y}}_i$, which means that it has the smallest difference in feature values, namely, its corresponding counterfactual. For simplicity of notation, the generic $i$-th instance and its corresponding counterfactual are hereafter denoted by $\mathbf{x}^{\mathrm{num}}_i$ and $\mathbf{x}_i^{\mathrm{num}, CF}$, respectively. By repeating this procedure for each boundary pair, BoCSoR obtains all instance-counterfactual pairs $(\mathbf{x}^{\mathrm{num}}_i, \mathbf{x}_i^{\mathrm{num}, CF})$.
+
+It is important to underline that this geometric interpolation relies on the continuous nature of the original feature space $\mathbb{R}^{n_{\mathrm{num}}}$, ensuring that synthetic points remain valid instances. The adaptation of this concept for discrete categorical spaces is detailed in the next subsection. A graphical illustration of the original BoCSoR boundary-point and counterfactual-refinement procedure in the continuous numerical setting is provided in Figure~\ref{fig:continuous-space-boundary}.
+
+\begin{figure}[p]
+  \centering
+  \begin{tikzpicture}[
+    scale=0.76,
+    axis/.style={thick, ->, >=Stealth},
+    dot/.style={circle, inner sep=2pt},
+    class0/.style={dot, fill=blue!95, draw=blue!100, thick},
+    class1/.style={rectangle, inner sep=2.5pt, fill=red!95, draw=red!100, thick},
+    boundary/.style={dot, fill=cyan!60, draw=blue!90, thick, inner sep=2.5pt},
+    synth1/.style={dot, fill=yellow!75, draw=orange!95, thick, inner sep=1.8pt},
+    synth2/.style={dot, fill=yellow!75, draw=orange!95, thick, inner sep=1.8pt},
+    cfsynth/.style={diamond, fill=orange!95, draw=orange!100, thick, inner sep=2.2pt}
+  ]
+    \begin{scope}[yshift=0cm]
+      \fill[blue!15, opacity=0.75]
+      (0.5,0.5) -- (0.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \fill[red!15, opacity=0.75]
+      (6.5,0.5) -- (6.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \draw[axis] (0.5,0.5) -- (7,0.5) node[right, font=\small] {$X_1$};
+      \draw[axis] (0.5,0.5) -- (0.5,7) node[above, font=\small] {$X_2$};
+      \draw[dashed, very thick, purple!80]
+      (3.4,0.5)
+      .. controls (3.7,1.0) and (4.2,1.6) .. (3.8,2.5)
+      .. controls (3.2,3.5) and (3.6,5) .. (3.2,6.5);
+      \node[class0] at (2,2) {};
+      \node[class0] at (1,4) {};
+      \node[class0] at (2,5.2) {};
+      \node[class0] at (2.6,1.8) {};
+      \node[class0] at (1.6,3.2) {};
+      \node[class1] at (5.2,4.4) {};
+      \node[class1] at (5.8,2.6) {};
+      \node[class1] at (6,5.2) {};
+      \node[class1] (nn1) at (4.15,3.0) {};
+      \node[class1] at (5.0,1.9) {};
+      \node[boundary] (bi) at (3,3) {};
+      \draw[very thick, gray!50] (nn1) -- (bi);
+      \node[synth1] (s1_p1) at (4.0,3.0) {};
+      \draw[dashed, very thick, gray!50] (s1_p1) -- (3.0, 3.0);
+      \node[font=\small, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=black!40] at (3.5, 0.8) {\textbf{Step 1: First Interpolation}\\$s_1 \in$ Class $1-y$\\(From right to left)};
+      \node[font=\tiny, align=center, fill=cyan!15, rounded corners, inner sep=2pt] at (3, 3.5) {Boundary\\$\mathbf{x}_i^{y}$};
+      \node[font=\tiny, align=center, fill=red!15, rounded corners, inner sep=2pt] at (4.2, 3.5) {Nearest\\$\mathbf{x}_r^{1-y}$};
+    \end{scope}
+    \begin{scope}[yshift=-8cm]
+      \fill[blue!15, opacity=0.75]
+      (0.5,0.5) -- (0.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \fill[red!15, opacity=0.75]
+      (6.5,0.5) -- (6.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \draw[axis] (0.5,0.5) -- (7,0.5) node[right, font=\small] {$X_1$};
+      \draw[axis] (0.5,0.5) -- (0.5,7) node[above, font=\small] {$X_2$};
+      \draw[dashed, thick, purple!80]
+      (3.4,0.5)
+      .. controls (3.7,1.0) and (4.2,1.6) .. (3.8,2.5)
+      .. controls (3.2,3.5) and (3.6,5) .. (3.2,6.5);
+      \node[class0] at (2,2) {};
+      \node[class0] at (1,4) {};
+      \node[class0] at (2,5.2) {};
+      \node[class0] at (2.6,1.8) {};
+      \node[class0] at (1.6,3.2) {};
+      \node[class1] at (5.2,4.4) {};
+      \node[class1] at (5.8,2.6) {};
+      \node[class1] at (6,5.2) {};
+      \node[class1] (nn2) at (4.15,3.0) {};
+      \node[class1] at (5.0,1.9) {};
+      \node[boundary] (bi2) at (3,3) {};
+      \draw[very thick, gray!50] (nn2) -- (bi2);
+      \draw[dashed, very thick, gray!50] (4.0,3.0) -- (3.7,3.0);
+      \node[synth2] (s2_p2) at (3.7,3.0) {};
+      \node[font=\small, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=black!40] at (3.5, 0.8) {\textbf{Step 2: Continue Interpolation}\\$s_2 \in$ Class $1-y$\\(Move toward boundary)};
+    \end{scope}
+    \begin{scope}[yshift=-16cm]
+      \fill[blue!15, opacity=0.75]
+      (0.5,0.5) -- (0.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \fill[red!15, opacity=0.75]
+      (6.5,0.5) -- (6.5,6.5) -- (3.2,6.5)
+      .. controls (3.6,5) and (3.2,3.5) .. (3.8,2.5)
+      .. controls (4.2,1.6) and (3.7,1.0) .. (3.4,0.5) -- cycle;
+      \draw[axis] (0.5,0.5) -- (7,0.5) node[right, font=\small] {$X_1$};
+      \draw[axis] (0.5,0.5) -- (0.5,7) node[above, font=\small] {$X_2$};
+      \draw[dashed, thick, purple!80]
+      (3.4,0.5)
+      .. controls (3.7,1.0) and (4.2,1.6) .. (3.8,2.5)
+      .. controls (3.2,3.5) and (3.6,5) .. (3.2,6.5);
+      \node[class0] at (2,2) {};
+      \node[class0] at (1,4) {};
+      \node[class0] at (2,5.2) {};
+      \node[class0] at (2.6,1.8) {};
+      \node[class0] at (1.6,3.2) {};
+      \node[class1] at (5.2,4.4) {};
+      \node[class1] at (5.8,2.6) {};
+      \node[class1] at (6,5.2) {};
+      \node[class1] (nn3) at (4.15,3.0) {};
+      \node[class1] at (5.0,1.9) {};
+      \node[boundary] (bi3) at (3,3) {};
+      \draw[very thick, gray!50] (nn3) -- (bi3);
+      \draw[dashed, very thick, gray!50] (3.7,3.0) -- (3.4,3.0);
+      \node[synth2] (s3_p3) at (3.4,3.0) {};
+      \node[cfsynth] (s2_cf) at (3.7,3.0) {};
+      \node[font=\small, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=black!40] at (3.5, 0.8) {\textbf{Step 3: Decision Boundary Crossed}\\$s_3 \in$ Class $y$\\(Select counterfactual)};
+      \node[font=\tiny, align=center, draw=orange!95, rounded corners, fill=orange!20, thick] at (3.7, 2.3) {\textbf{CF} = $s_2$\\Counterfactual};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Iterative process of the original BoCSoR method for finding synthetic counterfactuals. Panel 1 shows the first synthetic instance $s_1$ classified as class $1-y$. Panel 2 shows the second synthetic instance $s_2$, also classified as class $1-y$. Panel 3 shows the third synthetic instance $s_3$ classified as class $y$, triggering the selection of $s_2$ as the synthetic counterfactual $\mathbf{x}_i^{\mathrm{num},CF}$ closest to the boundary instance $\mathbf{x}_i^{\mathrm{num},y}$.}
+  \label{fig:continuous-space-boundary}
+\end{figure}
+
+Considering an instance--counterfactual pair $(\mathbf{x}^{\mathrm{num}}_i, \mathbf{x}_i^{\mathrm{num}, CF})$ obtained through the procedure described above, to assess the importance of each feature index $j$ for the classification of $\mathbf{x}^{\mathrm{num}}_i$, BoCSoR performs a perturbation step. During this step, the method iterates over all features $X_j$, modifying one feature at a time in the counterfactual in order to evaluate the corresponding importance. More precisely, for each feature $X_j$, the value $x_{ij}^{\mathrm{num}, CF}$ in $\mathbf{x}_i^{\mathrm{num}, CF}$ is temporarily replaced with the corresponding value $x_{ij}^{\mathrm{num}}$ observed in $\mathbf{x}^{\mathrm{num}}_i$, while the remaining feature values are left unchanged. Denoting by $\mathbf{x}_{i}^{\mathrm{num}, CF, j}$ the perturbed counterfactual obtained after replacing, in $\mathbf{x}_i^{\mathrm{num}, CF}$, the value $x_{ij}^{\mathrm{num}, CF}$ with $x_{ij}^{\mathrm{num}}$, the instance $\mathbf{x}_{i}^{\mathrm{num}, CF, j}$ is then classified again by the trained classifier. The perturbation step is performed for all instance--counterfactual pairs. The outcome of all perturbation steps is formalized using the indicator function $\mathbb{I}(\cdot)$ introduced in Section~\ref{sec:hybrid-encoding-distance}
+
+\begin{equation}
+  I_{ij} = \mathbb{I}\left(f(\mathbf{x}_{i}^{\mathrm{num}, CF, j}) = f(\mathbf{x}^{\mathrm{num}}_i)\right) \qquad \forall i \in [1, m], j \in [1, n_\mathrm{num}].
+\end{equation}
+
+Accordingly, $I_{ij}=1$ if replacing $x_{ij}^{\mathrm{num}, CF}$ with $x_{ij}^{\mathrm{num}}$ causes the modified counterfactual to switch its predicted class to match the original instance, and $I_{ij}=0$ otherwise. Equivalently, the value $x_{ij}^{\mathrm{num}}$ is recorded as relevant for instance $\mathbf{x}^{\mathrm{num}}_i$ exactly when $I_{ij}=1$. After this check, the original value of the feature in the counterfactual is restored before proceeding to the next feature. If the replacement does not induce a class change, that original value is restored immediately, and the analysis continues with the next feature.
+
+The whole procedure from the identification of the boundary points up to the perturbation step is then repeated for the instances belonging to the opposite class, so that both directions of the comparison are examined separately. The reason is that the two directions of the comparison are not, in general, symmetric: if $\mathbf{x}^{\mathrm{num}}_j$ is selected as a counterfactual reference for $\mathbf{x}^{\mathrm{num}}_i$, it does not necessarily follow that $\mathbf{x}^{\mathrm{num}}_i$ is also the counterfactual reference for $\mathbf{x}^{\mathrm{num}}_j$. Therefore, the local geometry of the instance--counterfactual relation may differ depending on which class is taken as the reference class. 
+
+Let $\mathcal{B}$ be defined as the set of all boundary points 
+
+\begin{equation}
+  \mathcal{B} = \mathcal{B}_y \cup \mathcal{B}_{1-y},
+\end{equation}
+
+and let $|\mathcal{B}| = |\mathcal{B}_y| + |\mathcal{B}_{1-y}|$ denote the total number of boundary instance pairs. For each feature index $j$, let $S_j$ denote the total number of class-switch events induced by perturbing feature $X_j$ across all tested boundary instances:
+
+\begin{equation}
+  S_j = \sum_{\mathbf{x}^{\mathrm{num}}_i \in \mathcal{B}_y} I_{ij} + \sum_{\mathbf{x}^{\mathrm{num}}_i \in \mathcal{B}_{1-y}} I_{ij}.
+\end{equation}
+
+Equivalently,
+
+\begin{equation}
+  S_j = \sum_{\mathbf{x}^{\mathrm{num}}_i \, \in \, \mathcal{B}} I_{ij}.
+\end{equation}
+
+The BoCSoR score associated with feature index $j$ is then defined as
+
+\begin{equation}
+  \mathrm{BoCSoR}_j = \frac{S_j}{|\mathcal{B}|}.
+\end{equation}
+
+Hence, $\mathrm{BoCSoR}_j \in [0,1]$ measures the proportion of boundary instances in $\mathcal{B}_0 \cup \mathcal{B}_1$ for which substituting $x_{ij}^{\mathrm{num}}$ is sufficient to induce the class switch under the substitution test. In the original BoCSoR method, the object retained at this stage is therefore the feature index $j$, rather than the specific value $x_{ij}^{\mathrm{num}}$ involved in the replacement. The closer $\mathrm{BoCSoR}_j$ is to $1$, the greater the ability of the values observed for feature index $j$ to determine the model outcome on their own, thereby indicating very high global relevance for the corresponding feature in the model decisions. Thus, the BoCSoR score serves as a \textit{feature importance metric}, quantifying each feature's capacity to influence the model's decisions.
+
+\subsection{Adaptation to the Present Work}
+
+BoCSoR is here adapted to a setting that differs substantially from that of the original method. After the preprocessing stage described in the section \ref{sec:feature-space-formalization}, the dataset is entirely categorical. Accordingly, the analysis no longer operates in a continuous numerical feature space, but on the categorical dataset
+
+\begin{equation}
+  \widetilde{\mathcal{D}} = \{(\tilde{\mathbf{x}}_i, y_i)\}_{i=1}^{m},
+  \qquad \tilde{\mathbf{x}}_i \in \widetilde{\mathcal{X}},
+  \qquad y_i \in \mathcal{Y}=\{0,1\}.
+\end{equation}
+
+Under the notation introduced above, each instance is represented as
+
+\begin{equation}
+  \tilde{\mathbf{x}}_i = (\tilde{x}_{i1},\dots,\tilde{x}_{i\mathrm{n_{cat}}}),
+\end{equation}
+
+where each component $\tilde{x}_{ij}$ denotes the category associated with feature $X_j$, and for each feature index $j$ the admissible categories belong to the set $\mathcal{C}_j$.
+
+This change has an immediate consequence for the definition of proximity between instances. In the original BoCSoR method, distances are computed in a continuous numerical space by means of the Euclidean metric, which is denoted here by $d_{\mathrm{eucl}}(\cdot \, , \cdot)$. In the present setting, this choice is no longer appropriate because the instances under comparison are fully categorical. Therefore the distance is instead computed through the global Manhattan distance defined in Section~\ref{sec:hybrid-encoding-distance}, namely $d_{\mathrm{Man}}(\tilde{\mathbf{x}}_a,\tilde{\mathbf{x}}_b)$.
+
+As in the original BoCSoR method, the analysis is carried out exclusively on the training set, since the goal is to explain the decision rule learned by the classifier from the data used during fitting. Furthermore, also in this case only correctly classified training instances are retained, because the counterfactual comparison is intended to characterize the local structure of the model around instances for which the predicted class coincides with the true ground-truth class. Accordingly, let $\widetilde{\mathcal{D}}_{\mathrm{train}} \subset \widetilde{\mathcal{D}}$ denote the training set. For each target class $y \in \mathcal{Y}=\{0,1\}$, the subset of its correctly classified training instances is defined as
+
+\begin{equation}
+  \widetilde{\mathcal{D}}_{y} = \{ \tilde{\mathbf{x}}_i \mid (\tilde{\mathbf{x}}_i, y_i) \in \widetilde{\mathcal{D}}_{\mathrm{train}}, \; y_i = y, \; f(\tilde{\mathbf{x}}_i) = y \}.
+\end{equation}
+
+Since $\mathcal{Y}=\{0,1\}$, the set $\widetilde{\mathcal{D}}_{1-y}$ analogously denotes the subset of correctly classified training instances belonging to the opposite class. To make the two roles explicit in the remainder of this subsection, an instance belonging to the reference class is denoted by $\tilde{\mathbf{x}}^{y}_i \in \widetilde{\mathcal{D}}_y$, whereas an instance belonging to the opposite class is denoted by $\tilde{\mathbf{x}}^{1-y}_r \in \widetilde{\mathcal{D}}_{1-y}$.
+
+Then, for each class $y \in \mathcal{Y}$ and for each instance $\tilde{\mathbf{x}}^{y}_i \in \widetilde{\mathcal{D}}_{y}$, all Manhattan distances from $\tilde{\mathbf{x}}^{y}_i$ to all instances of the opposite class are computed:
+
+\begin{equation}
+  d_{\mathrm{Man}}\!\left(\tilde{\mathbf{x}}^{y}_i, \tilde{\mathbf{x}}^{1-y}_r\right), \qquad \forall \, r \in \{1, \ldots, |\widetilde{\mathcal{D}}_{1-y}|\}.
+\end{equation}
+
+Among these distances, the minimum one for each instance $\tilde{\mathbf{x}}^{y}_i \in \widetilde{\mathcal{D}}_{y}$ is denoted by $\widetilde{\delta}_i^{y}$ and is defined as
+
+\begin{equation}
+  \widetilde{\delta}_i^{y} = \min_{r \in \{1, \ldots, |\widetilde{\mathcal{D}}_{1-y}|\}} d_{\mathrm{Man}}\!\left(\tilde{\mathbf{x}}^{y}_i, \tilde{\mathbf{x}}^{1-y}_r\right).
+\end{equation}
+
+Accordingly, for a fixed class $y \in \mathcal{Y}$, the set of such minimum distances is collected in
+
+\begin{equation}
+  \widetilde{\Delta}_{y} = \left\{ \widetilde{\delta}_i^{y} \, \middle| \, \tilde{\mathbf{x}}^{y}_i \in \widetilde{\mathcal{D}}_{y} \right\}.
+\end{equation}
+
+Also in this case $\tau_p$ denote a threshold corresponding to a chosen empirical percentile computed on the set of distances $\widetilde{\Delta}_{y}$. The set of boundary points for a given class, denoted by $\widetilde{\mathcal{B}}_y$, is defined as the collection of pairs $(\tilde{\mathbf{x}}^{y}_i, \tilde{\mathbf{x}}^{1-y}_r)$ denoted here as boundary pairs, whose associated minimum distance $\widetilde{\delta}_i^{y} \in \widetilde{\Delta}_{y}$ is less than or equal to this
+threshold, namely:
+
+\begin{equation}
+  \widetilde{\mathcal{B}}_y = \left\{ \left(\tilde{\mathbf{x}}^{y}_i, \tilde{\mathbf{x}}^{1-y}_r\right) \, \middle| \, \widetilde{\delta}_i^y \in \widetilde{\Delta}_y,\; \widetilde{\delta}_i^y \leq \tau_p \right\}.
+\end{equation}
+
+A graphical illustration of the boundary-point selection procedure in the fully categorical setting is provided in Figure~\ref{fig:categorized-space-boundary}.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    scale=1.4,
+    axis/.style={thick, ->, >=Stealth},
+    dot/.style={circle, inner sep=2pt},
+    class0/.style={dot, fill=blue!95, draw=blue!100, thick},
+    class1/.style={rectangle, inner sep=2.5pt, fill=red!95, draw=red!100, thick},
+    boundary/.style={dot, fill=cyan!60, draw=blue!90, thick, inner sep=2.5pt},
+    gridline/.style={gray!60, very thin, dashed}
+  ]
+    \fill[blue!15, opacity=0.65] (0.5,0.5) rectangle (3.5,6.5);
+    \fill[red!15, opacity=0.65] (3.5,0.5) rectangle (6.5,6.5);
+    \draw[gridline, step=1] (0.5,0.5) grid (6.5,6.5);
+    \draw[axis] (0.5,0.5) -- (7,0.5) node[right, font=\small] {$X_1$ (Categories)};
+    \draw[axis] (0.5,0.5) -- (0.5,7) node[above, font=\small] {$X_2$ (Categories)};
+    \foreach \x in {1,2,3,4,5,6} {
+      \draw[thick] (\x,0.4) -- (\x,0.6);
+      \node[below=4pt, font=\scriptsize] at (\x,0.5) {$c_{1,\x}$};
+    }
+    \foreach \y in {1,2,3,4,5,6} {
+      \draw[thick] (0.4,\y) -- (0.6,\y);
+      \node[left=4pt, font=\scriptsize] at (0.5,\y) {$c_{2,\y}$};
+    }
+    \draw[dashed, very thick, purple!95] (3.5, 0.5) -- (3.5, 6.8) node[above, font=\footnotesize, align=center, fill=white, inner sep=2pt, rounded corners] {Discrete\\Decision Boundary};
+    \draw[dashed, very thick, green!85] (3, 3) -- (3, 5) node[pos=0.5, font=\tiny, fill=white, inner sep=2pt] {d=2};
+    \draw[dashed, very thick, green!85] (3, 1) -- (3, 3) node[pos=0.5, font=\tiny, fill=white, inner sep=2pt] {d=2};
+    \draw[dashed, very thick, green!85] (3, 3) -- (5, 3) node[pos=0.5, font=\tiny, fill=white, inner sep=2pt] {d=2};
+    \draw[dashed, very thick, green!85] (1, 3) -- (3, 3) node[pos=0.5, font=\tiny, fill=white, inner sep=2pt] {d=2};
+    \draw[dashed, very thick, green!75] (3, 3) -- (3, 4) -- (4, 4);
+    \draw[dashed, very thick, green!75] (3, 3) -- (4, 3) -- (4, 4) node[pos=0.75, font=\tiny, fill=white, inner sep=1pt] {d=2};
+    \draw[dashed, very thick, green!75] (3, 3) -- (4, 3) -- (4, 2) node[pos=0.75, font=\tiny, fill=white, inner sep=1pt] {d=2};
+    \draw[dashed, very thick, green!75] (3, 3) -- (3, 2) -- (4, 2);
+    \draw[dashed, very thick, green!75] (3, 3) -- (2, 3) -- (2, 2) node[pos=0.75, font=\tiny, fill=white, inner sep=1pt] {d=2};
+    \draw[dashed, very thick, green!75] (3, 3) -- (3, 2) -- (2, 2);
+    \draw[dashed, very thick, green!75] (3, 3) -- (2, 3) -- (2, 4) node[pos=0.75, font=\tiny, fill=white, inner sep=1pt] {d=2};
+    \draw[dashed, very thick, green!75] (3, 3) -- (3, 4) -- (2, 4);
+    \foreach \pt in {(3,5), (3,1), (5,3), (1,3), (4,4), (4,2), (2,2), (2,4)} 
+    {
+      \draw[green!85, fill=green!40, opacity=0.3] \pt circle (0.15);
+    }
+    \node[class0] at (2,2) {};
+    \node[class0] at (1,4) {};
+    \node[class0] at (2,6) {};
+    \node[class0] at (1,5) {};
+    \node[class1] (nn1) at (4,3) {};
+    \node[class1] at (6,5) {};
+    \node[class1] at (5,6) {};
+    \node[class1] at (6,2) {};
+    \node[boundary] (bi) at (3,3) {};
+    \draw[->, >=Stealth, shorten >=3pt, thick, red!90] (5.5, 2) -- (nn1);
+    \node[font=\footnotesize, red!95!black, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=red!70] at (5.8, 1.5) {Opposite Class\\Nearest Neighbor\\$\tilde{\mathbf{x}}^{1-y}_{r}$};
+    \node[font=\footnotesize, blue!95!black, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=blue!70] (lblBI) at (1.2, 6.3) {Boundary\\Instance\\$\tilde{\mathbf{x}}^{y}_i$};
+    \draw[->, >=Stealth, shorten >=3pt, thick, blue!70] (lblBI) -- (bi);
+    \node[font=\scriptsize, green!85!black, align=center, fill=white, inner sep=3pt, rounded corners, thick, draw=green!70] (lblDist) at (0.8, 1) {Manhattan distance\\radii\\$\widetilde{\delta}_{i}^{y} \leq \tau_p^{(y)}$\\All paths = dist 2};
+    \draw[->, >=Stealth, shorten >=3pt, thick, green!80] (lblDist) -- (2.5, 2.5);
+    \matrix [draw=black!70, fill=white, rounded corners, below right, font=\small, inner sep=5pt, row sep=3pt] at (5.2, 6.7) {
+      \node[class0, label=right:{Class $0$ (ref class $y$)}] {}; \\
+      \node[class1, label=right:{Class $1$ (opposite class)}] {}; \\
+    };
+  \end{tikzpicture}
+  \caption{Schematic representation of the discrete categorical feature space. The boundary instance $\tilde{\mathbf{x}}^{y}_i$ is identified by computing Manhattan distances to all opposite-class instances. Green dashed lines with increased thickness indicate the Manhattan distance metric paths at multiple distance levels within the threshold $\widetilde{\delta}_{i}^{y} \leq \tau_p^{(y)}$, defining the boundary region in the discrete grid. The boundary instance of the opposite class $\tilde{\mathbf{x}}^{1-y}_{r}$ is selected as a potential counterfactual within this distance threshold.}
+  \label{fig:categorized-space-boundary}
+\end{figure}
+
+After this step, one must address the second fundamental consequence of the present setting, regarding the generation of intermediate instances. In the original BoCSoR method, interpolation is meaningful because the feature space is continuous, so points lying on the line segment between an instance and its counterfactual remain well-defined elements of the space. In the present setting, by contrast, the feature space is fully categorical and inherently discrete.  Since interpolation is not suitable in this setting, given an instance $\tilde{\mathbf{x}}_i$, its counterfactual $\tilde{\mathbf{x}}^{CF}_i$ is defined simply as the nearest instance belonging to the opposite class.
+In the fully categorical setting considered in this work, relying on a single nearest opposite-class instance is not always sufficient. Because distances are discrete, the nearest neighbor may reflect only one specific and possibly unstable way of crossing the decision boundary, and perturbing the associated features does not necessarily provide a robust explanation of the class-change mechanism. For this reason, the $k$ nearest opposite-class instances are considered as the $k$ counterfactuals of a considered instance, so as to obtain a more stable and representative description of the local decision region. In particular, relying on an ensemble of multiple neighbors helps absorb the variance naturally introduced by the discretization of the feature space, thereby providing a more robust estimate of the local decision boundary.
+
+Specifically, fixing a reference class $y \in \mathcal{Y}$, for each instance $\tilde{\mathbf{x}}_i \in \widetilde{\mathcal{D}}_y$, the method identifies its $k$ nearest counterfactuals of the opposite class $\widetilde{\mathcal{D}}_{1-y}$, where $k$ is a configurable parameter of the analysis. Formally, for a given $k$, the $k$ counterfactuals in $\widetilde{\mathcal{D}}_{1-y}$ to $\tilde{\mathbf{x}}_i$, not necessarily in $\mathcal{B}_{1-y}$, are denoted by
+
+\begin{equation}
+  \tilde{\mathbf{x}}_{i,1}^{CF},\; \tilde{\mathbf{x}}_{i,2}^{CF},\; \dots,\; \tilde{\mathbf{x}}_{i,k}^{CF}.
+\end{equation}
+
+They are ordered by increasing Manhattan distance, i.e.,
+
+\begin{equation}
+  d_{\mathrm{Man}}(\tilde{\mathbf{x}}_i, \tilde{\mathbf{x}}_{i,1}^{CF}) \leq d_{\mathrm{Man}}(\tilde{\mathbf{x}}_i, \tilde{\mathbf{x}}_{i,2}^{CF}) \leq \cdots \leq d_{\mathrm{Man}}(\tilde{\mathbf{x}}_i, \tilde{\mathbf{x}}_{i,k}^{CF}).
+\end{equation}
+
+In the present fully categorical setting, given an instance $\tilde{\mathbf{x}}_i$ and one of its counterfactuals $\tilde{\mathbf{x}}_{i,r}^{CF}$, with $r \in \{1,\dots,k\}$, the perturbation step consists in replacing, for each feature $X_j$, the category $\tilde{x}_{ij,r}^{CF}$ (i.e., the $j$-th component of $\tilde{\mathbf{x}}_{i,r}^{CF}$) with the corresponding category $\tilde{x}_{ij}$ observed in the instance $\tilde{\mathbf{x}}_i$, while leaving all other components unchanged. The result is called perturbed counterfactual and denoted by $\tilde{\mathbf{x}}_{i,r}^{CF,j}$.
+If the perturbation produces a class change with respect to the original observed class of the counterfactual, namely, if $f(\tilde{\mathbf{x}}_{i,r}^{CF,j}) = f(\tilde{\mathbf{x}}_i)$, then, differently from the original BoCSoR method, which records only the feature $X_j$ as relevant, the present approach records the full feature-category pair $(X_j = \tilde{x}_{ij})$, with $\tilde{x}_{ij} \in \mathcal{C}_j$, as relevant for the explanation of the instance $\tilde{\mathbf{x}}_i$ with respect to its $r$-th counterfactual.
+
+The presented method introduces an additional element with respect to the original BoCSoR method. At the end of the perturbation step for each instance $\tilde{\mathbf{x}}_i$, all relevant feature-category pairs for that instance are collected into a list, denoted by $\mathcal{L}_i$. Since the present approach considers $k$ counterfactuals for each instance, this list is obtained by taking the union, over all counterfactuals $r$ and all features $j$, of the pairs for which the substitution test induces a class switch:
+
+\begin{equation}
+  \mathcal{L}_i = \bigcup_{r=1}^{k}\; \left\{ (X_j = \tilde{x}_{ij}) \;\middle|\; j \in \{1,\dots,n_{\mathrm{cat}}\},\; f(\tilde{\mathbf{x}}_{i,r}^{CF,j}) = f(\tilde{\mathbf{x}}_i) \right\}.
+\end{equation}
+
+\noindent\textbf{Example (perturbation step).} Consider an instance $\tilde{\mathbf{x}}_i$ belonging to the class $\mathcal{D}_y$, with the following categorical features after preprocessing:
+
+\begin{equation*}
+  \begin{aligned}
+    \tilde{\mathbf{x}}_i = (&\texttt{Age=Middle-aged}, \texttt{Education=Bachelors}, \\
+    &\texttt{Occupation=Tech-support}, \texttt{Sex=Male}),
+  \end{aligned}
+\end{equation*}
+
+its nearest counterfactuals is:
+\begin{equation}
+  \begin{aligned}
+    \tilde{\mathbf{x}}_{i,1}^{CF} = (\texttt{Age}=\texttt{Senior}, \texttt{Education}=\texttt{Masters}, \\ 
+    \texttt{Occupation}=\texttt{Prof-specialty}, \texttt{Sex}=\texttt{Male}).
+  \end{aligned}
+\end{equation}
+
+The perturbation step tests each feature in turn. For example, when perturbing the Education feature:
+
+\begin{equation}
+  \begin{aligned}
+    \tilde{\mathbf{x}}_{i,1}^{CF,\texttt{Edu}} = (\texttt{Age}=\texttt{Senior}, \texttt{Education}=\texttt{Bachelors},\\ 
+    \texttt{Occupation}=\texttt{Prof-specialty}, \texttt{Sex}=\texttt{Male}).
+  \end{aligned}
+\end{equation}
+
+If $f(\tilde{\mathbf{x}}_{i,1}^{CF,\texttt{Edu}}) = f(\tilde{\mathbf{x}}_i)$, then the feature-category pair $(\texttt{Education}=\texttt{Bachelors})$ is recorded as relevant. Supposing that it is the only relevant feature-category pair with respect to the closest counterfactual, the local explanation list for $\tilde{\mathbf{x}}_i$ becomes
+
+\begin{equation}
+  \begin{aligned}
+    \mathcal{L}_i = \{(\texttt{Education}=\texttt{Bachelors})\}.
+  \end{aligned}
+\end{equation}
+
+Similarly, given the second closest counterfactual $\tilde{\mathbf{x}}_{i,2}^{CF}$
+
+\begin{equation}
+  \begin{aligned}
+    \tilde{\mathbf{x}}_{i,2}^{CF,\texttt{Occ}} = (\texttt{Age}=\texttt{Senior}, \texttt{Education}=\texttt{Masters},\\
+    \texttt{Occupation}=\texttt{Tech-support}, \texttt{Sex}=\texttt{Male}),
+  \end{aligned}
+\end{equation}
+
+perturbing the $\texttt{Occupation}$ feature yields $f(\tilde{\mathbf{x}}_{i,2}^{CF,\texttt{Occ}}) = f(\tilde{\mathbf{x}}_i)$, making $(\texttt{Occupation}=\texttt{Tech-support})$ relevant. So the local explanation list for $\tilde{\mathbf{x}}_i$ becomes
+
+\begin{equation}
+  \begin{aligned}
+    \mathcal{L}_i = \{(\texttt{Education}=\texttt{Bachelors}), (\texttt{Occupation}=\texttt{Tech-support})\}.
+  \end{aligned}
+\end{equation}
+
+After testing all features and all $k$ counterfactuals, the local explanation list becomes
+
+\begin{equation}
+  \begin{aligned}
+    \mathcal{L}_i = \{(\texttt{Education}=\texttt{Bachelors}),\\ 
+    (\texttt{Occupation}=\texttt{Tech-support}),\\ 
+    (\texttt{Age}=\texttt{Middle-aged})\},
+  \end{aligned}
+\end{equation}
+
+capturing the specific feature-category combinations considered relevant for the local explanation of the model's decision on $\tilde{\mathbf{x}}_i$ with respect to its $k$ nearest counterfactuals.
+
+The analysis is conducted separately in the two directions, exactly as in the original formulation. That is, instances are first analyzed in $\widetilde{\mathcal{D}}_{0}$ with counterfactual references searched in $\widetilde{\mathcal{D}}_{1}$, and the roles of the two classes are then reversed. This distinction remains important because the counterfactual relation is not symmetric: if an instance from class $1$ is the closest counterfactual to an instance from class $0$, the converse need not have the same local relevance under the adopted distance and with respect to the learned decision boundary. Analyzing the two directions separately therefore preserves the asymmetric local geometry of the classification problem within the categorical setting.
+
+These lists $\mathcal{L}_i$ represent the local explanations for each point near the decision boundary. By collecting these pairs across all instances in $\widetilde{\mathcal{B}}_0 \cup \widetilde{\mathcal{B}}_1$, it becomes possible to analyze which specific categories (e.g., "Occupation = Tech-support") are most frequently responsible for the model's decisions. This approach allows for a granular and semantically meaningful global importance analysis, as it directly links the relevance of a feature to the specific categories it assumes in the dataset.
+
+To synthesize the local findings into a broader perspective, the collection of all explanation lists obtained from the boundary instances is defined as:
+\begin{equation}
+  \mathcal{E} = \{ \mathcal{L}_i \mid \tilde{\mathbf{x}}_i \in \widetilde{\mathcal{B}}_0 \cup \widetilde{\mathcal{B}}_1 \} \qquad \forall i \in [1, m].
+\end{equation}
+
+This set $\mathcal{E}$ serves as the primary data structure for the global interpretation of the model. By aggregating the feature-category pairs contained in each $\mathcal{L}_i$, it is possible to identify recurring patterns and determine which specific categories across the entire feature space have the most significant impact on the classifier's behavior. This collective representation effectively bridges the gap between local counterfactual analysis and global model transparency, providing a comprehensive map of the decision logic within the categorical setting.
+
+The complete procedure described above is summarized in Algorithm~\ref{alg:bocsor-adapted}.
+
+\begin{algorithm}[H]
+  \caption{Adapted BoCSoR for Categorical Data}\label{alg:bocsor-adapted}
+  \begin{algorithmic}[1]
+    \Statex \textbf{Input:}
+    \Statex \quad $\widetilde{\mathcal{D}}_{\mathrm{train}}$: Training dataset with fully categorical features
+    \Statex \quad $f$: Predictive classification model (black-box)
+    \Statex \quad $p$: Percentile to define the boundary threshold $\tau$
+    \Statex \quad $k$: Number of neighbors to extract candidate counterfactuals
+    \Statex \textbf{Output:}
+    \Statex \quad $\mathcal{E}$: Set of local explanations (one list $\mathcal{L}_i$ of relevant feature-category pairs per boundary instance)
+    \Procedure{AdaptedBoCSoR}{$\widetilde{\mathcal{D}}_{\mathrm{train}},\, f,\, p,\, k$}
+      \State $\mathcal{E} \gets \emptyset$ \Comment{Initialize the final set of local explanations}
+      \For{$y \in \{0,1\}$}
+        \State $\widetilde{\mathcal{D}}_y \gets$ correctly classified training instances with label $y$
+        \State $\textit{nearestDist} \gets$ empty map \Comment{Initialize distance map}
+        \For{$\tilde{\mathbf{x}} \in \widetilde{\mathcal{D}}_y$}
+          \State $\textit{nearestDist}[\tilde{\mathbf{x}}] \gets \min_{\tilde{\mathbf{x}}' \in \widetilde{\mathcal{D}}_{1-y}} d_{\mathrm{Man}}(\tilde{\mathbf{x}}, \tilde{\mathbf{x}}')$ \Comment{Distance to closest opposite class instance}
+        \EndFor
+        \State $\tau \gets p$-th percentile of $\textit{nearestDist}$ \Comment{Compute boundary threshold}
+        \State $\widetilde{\mathcal{B}}_y \gets \{\, \tilde{\mathbf{x}} \in \widetilde{\mathcal{D}}_y : \textit{nearestDist}[\tilde{\mathbf{x}}] \leq \tau \,\}$ \Comment{Collect boundary points}
+        \For{$\tilde{\mathbf{x}}_i \in \widetilde{\mathcal{B}}_y$}
+          \State $\textit{cfs} \gets$ $k$ nearest neighbours of $\tilde{\mathbf{x}}_i$ in $\widetilde{\mathcal{D}}_{1-y}$ under $d_{\mathrm{Man}}$ \Comment{Find candidate counterfactuals}
+          \State $\mathcal{L}_i \gets \emptyset$ \Comment{Initialize list of feature-category pairs for $\tilde{\mathbf{x}}_i$}
+          \For{$\tilde{\mathbf{x}}^{CF} \in \textit{cfs}$}
+            \For{$j \in \{1, \ldots, n_{\mathrm{cat}}\}$}
+              \State $\tilde{\mathbf{x}}' \gets \Call{Replace}{\tilde{\mathbf{x}}^{CF},\, j,\, \tilde{x}_{ij}}$ \Comment{Swap feature $j$ with the original category}
+              \If{$f(\tilde{\mathbf{x}}') = f(\tilde{\mathbf{x}}_i)$} \Comment{Check if predicted class flips to the original}
+                \State $\mathcal{L}_i \gets \mathcal{L}_i \cup \{(X_j = \tilde{x}_{ij})\}$ \Comment{Add relevant feature-category pair to the list}
+              \EndIf
+            \EndFor
+          \EndFor
+          \State $\mathcal{E} \gets \mathcal{E} \cup \{\mathcal{L}_i\}$ \Comment{Store the list of relevant feature-category pairs for $\tilde{\mathbf{x}}_i$}
+        \EndFor
+      \EndFor
+      \State \Return $\mathcal{E}$
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
+
+\section{Association Rule Mining: Concepts and Foundations}
+\label{sec:arm-foundations}
+
+As discussed in the previous section, the adapted BoCSoR method provides a list $\mathcal{L}_i$ of relevant feature-category pairs for each boundary instance. To observe how combinations of these features influence the model's overall decisions, Association Rule Mining (ARM) is applied to the collection $\mathcal{E}$ of such lists. Before describing the analysis itself, this section introduces the foundational concepts of ARM, which are then specialized to the setting of this thesis.
+Association Rule Mining is a data-mining technique for discovering relationships and patterns hidden within large transactional datasets. The method originated in the context of \emph{market basket analysis}~\cite{agrawal1994fast}, where the goal was to understand customer purchasing behavior by identifying which products tend to be bought together. Although ARM was initially developed for retail applications, its principles and algorithms have proven broadly applicable across diverse domains, including recommendation systems, web usage mining, and, as in the present work, model interpretability~\cite{han2000mining}.
+
+\subsection{Origin: Market Basket Analysis}
+
+In the classic market basket analysis scenario, a retailer maintains a transaction database where each entry records the items (products) purchased by a customer in a single shopping visit. The fundamental question driving this analysis concerns which items tend to be purchased together. Understanding such patterns allows retailers to optimize store layouts, design targeted promotions, and improve product recommendations. For instance, a retailer might discover that customers who buy bread and milk frequently also buy eggs, revealing a strong association among these products.
+
+\subsection{Itemsets, Transactions, and Association Rules}
+
+The foundational concepts of Association Rule Mining are \emph{itemsets} and \emph{transactions}. Formally, let $I = \{i_1, i_2, \dots, i_n\}$ be the universe of all available items, such as $I = \{\texttt{bread}, \texttt{milk}, \texttt{eggs}, \texttt{lemon}, \texttt{cheese}, \dots\}$. An \emph{itemset} is any subset $A \subseteq I$. An itemset containing $k$ items is typically referred to as a $k$-itemset. For example, $\{\texttt{bread}, \texttt{milk}\}$ is a 2-itemset, while $\{\texttt{eggs}\}$ is a 1-itemset.
+
+An \emph{association rule} is an implication of the form $A \Rightarrow B$, where $A$ and $B$ are disjoint itemsets (i.e., $A \cap B = \emptyset$). The rule $A \Rightarrow B$ suggests that transactions containing the items in $A$ are likely to contain the items in $B$ as well. In the previous example, a possible association rule is $\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}$, indicating that customers who purchase bread and milk are likely to purchase eggs too.
+
+A \emph{transaction} $T$ is a non-empty subset of items from $I$ (i.e., $T \subseteq I$), representing a specific purchase event. For example, $T = \{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}$.
+
+A \emph{transaction database} $\mathcal{D}$ is a collection of these transactions, denoted as $\mathcal{D} = \{T_1, T_2, \dots, T_q\}$, where each $T_k$ is uniquely identified by a transaction identifier (TID). An example database might be:
+
+\begin{equation*}
+  \begin{aligned}
+    \mathcal{D} = \{&\{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}, \{\texttt{milk}, \texttt{cheese}\},\\
+    &\{\texttt{eggs}, \texttt{cheese}, \texttt{lemon}\}, \{\texttt{butter}\}, \dots \}.
+  \end{aligned}
+\end{equation*}
+
+Consider a supermarket transaction database with five transactions recording customer purchases:
+
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabularx}{\textwidth}{>{\centering\arraybackslash}p{0.16\textwidth}|>{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Transaction ID} & \textbf{Items Purchased} \\
+    \midrule
+    $\text{TID}_1$ & \texttt{bread}, \texttt{milk}, \texttt{eggs}, \texttt{butter} \\
+    $\text{TID}_2$ & \texttt{bread}, \texttt{milk}, \texttt{eggs} \\
+    $\text{TID}_3$ & \texttt{milk}, \texttt{eggs}, \texttt{cheese} \\
+    $\text{TID}_4$ & \texttt{bread}, \texttt{butter} \\
+    $\text{TID}_5$ & \texttt{bread}, \texttt{milk}, \texttt{eggs}, \texttt{butter}, \texttt{cheese} \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Example transaction database for market basket analysis.}
+  \label{tab:market-basket-example}
+\end{table}
+
+Inspecting this database, one can observe that \texttt{bread}, \texttt{milk}, and \texttt{eggs} are frequently purchased together, while \texttt{cheese} appears less often. This suggests potential correlations between \texttt{bread}, \texttt{milk}, and \texttt{eggs}, and that \texttt{cheese} is purchased without being strictly linked to other items. The goal of ARM is to systematically analyze such databases to discover all significant underlying patterns and correlations.
+
+\subsection{Metrics}
+
+The quality and significance of an association rule are evaluated using several metrics, of which the most important are support, confidence, and lift.
+
+\paragraph{Support of an itemset.} The \emph{support} of an itemset $A$, denoted $\mathrm{supp}(A)$, is defined as the fraction of transactions in $\mathcal{D}$ that contain $A$:
+
+\begin{equation}
+  \mathrm{supp}(A) = \frac{|\{T_k \in \mathcal{D} \mid A \subseteq T_k\}|}{|\mathcal{D}|}.
+\end{equation}
+
+An itemset $A$ is called \emph{frequent} if $\mathrm{supp}(A) \geq \sigma$, where $\sigma$ is a user-defined minimum support threshold. The problem of finding all frequent itemsets is a central task in ARM, with efficient algorithms such as Apriori~\cite{agrawal1994fast} and FP-Growth~\cite{han2000mining} developed to solve it.
+
+\paragraph{Example (support of an itemset).} Considering the universe of items $I = \{\texttt{bread}, \texttt{milk}, \texttt{eggs}, \texttt{butter}, \texttt{cheese}\}$, the support of various itemsets can be computed as follows:
+
+\begin{itemize}
+  \item $\mathrm{supp}(\{\texttt{bread}\}) = \frac{4}{5} = 0.80$, since \texttt{bread} appears \\ 
+  in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_4, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{milk}\}) = \frac{4}{5} = 0.80$, since \texttt{milk} appears\\
+  in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_3, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{eggs}\}) = \frac{4}{5} = 0.80$, since \texttt{eggs} appears\\
+  in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_3, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{butter}\}) = \frac{3}{5} = 0.60$, since \texttt{butter} appears\\
+  in transactions $\text{TID}_1, \text{TID}_4, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{cheese}\}) = \frac{2}{5} = 0.40$, since \texttt{cheese} appears\\
+  in transactions $\text{TID}_3, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{bread}, \texttt{milk}\}) = \frac{3}{5} = 0.60$, since both appear \\
+  together in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_5$.
+  \item $\mathrm{supp}(\{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}) = \frac{3}{5} = 0.60$, since all three appear\\
+  together in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_5$.
+\end{itemize}
+
+If a minimum support threshold $\sigma = 0.50$ is set, then the itemsets $\{\texttt{bread}\}$, $\{\texttt{milk}\}$, $\{\texttt{eggs}\}$, $\{\texttt{butter}\}$, $\{\texttt{bread}, \texttt{milk}\}$, and $\{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}$ are all frequent, whereas $\{\texttt{cheese}\}$ with support $0.40$ would not be considered frequent under this threshold.
+
+\paragraph{Support of a rule.} The support of a rule $A \Rightarrow B$ is the support of the itemset $A \cup B$:
+
+\begin{equation}
+  \mathrm{supp}(A \Rightarrow B) = \mathrm{supp}(A \cup B).
+\end{equation}
+
+This metric indicates the proportion of transactions in the database that contain both $A$ and $B$. A rule with high support indicates that the pattern is common in the database and potentially valuable for practical applications.
+
+\paragraph{Example (support of a rule).} For the rule $\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}$, using the Table \ref{tab:market-basket-example}:
+
+\begin{itemize}
+  \item $\mathrm{supp}(\{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}) = 0.60$, since all three items appear together in transactions $\text{TID}_1, \text{TID}_2, \text{TID}_5$.
+\end{itemize}
+
+
+\paragraph{Confidence of a rule.} The confidence of a rule $A \Rightarrow B$ is defined as:
+
+\begin{equation}
+  \mathrm{conf}(A \Rightarrow B) = \frac{\mathrm{supp}(A \cup B)}{\mathrm{supp}(A)}.
+\end{equation}
+
+This metric measures the \emph{strength} of the implication: it represents the probability that $B$ is purchased given that $A$ is purchased. A high confidence indicates a strong rule, meaning that whenever $A$ appears, $B$ is very likely to appear as well. Confidence values range from $0$ to $1$, where a confidence of $1$ indicates a perfect rule (i.e., whenever $A$ is present, $B$ is always present), and a confidence close to $0$ indicates a weak rule.
+
+\paragraph{Example (confidence of a rule).} For the rule $\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}$, using the Table \ref{tab:market-basket-example}:
+
+\begin{itemize}
+  \item $\mathrm{conf}(\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}) = \frac{0.60}{0.60} = 1.0$, since the support of $\{\texttt{bread}, \texttt{milk}, \texttt{eggs}\}$ is $0.60$ and the support of $\{\texttt{bread}, \texttt{milk}\}$ is also $0.60$. This indicates a perfect rule: whenever customers purchase both \texttt{bread} and \texttt{milk}, they also purchase \texttt{eggs}.
+\end{itemize}
+
+\paragraph{Lift of a rule.} The lift of a rule $A \Rightarrow B$ is defined as:
+
+\begin{equation}
+  \mathrm{lift}(A \Rightarrow B) = \frac{\mathrm{conf}(A \Rightarrow B)}{\mathrm{supp}(B)}.
+\end{equation}
+
+Lift measures the \emph{correlation} between $A$ and $B$, specifically whether their co-occurrence is more frequent than expected if they were independent:
+
+\begin{itemize}
+  \item If $\mathrm{lift}(A \Rightarrow B) > 1$, then $A$ and $B$ are \emph{positively correlated}: the presence of $A$ increases the likelihood that $B$ is also present, beyond what would be expected by chance.
+  \item If $\mathrm{lift}(A \Rightarrow B) < 1$, then $A$ and $B$ are \emph{negatively correlated}: the presence of $A$ decreases the likelihood that $B$ is also present.
+  \item If $\mathrm{lift}(A \Rightarrow B) = 1$, then $A$ and $B$ are \emph{independent}: the presence of $A$ has no effect on the presence of $B$.
+\end{itemize}
+
+\paragraph{Example (lift of a rule).} For the rule $\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}$, using the Table \ref{tab:market-basket-example}:
+
+\begin{itemize}
+  \item $\mathrm{lift}(\{\texttt{bread}, \texttt{milk}\} \Rightarrow \{\texttt{eggs}\}) = \frac{1.0}{0.80} = 1.25$. This indicates a positive correlation: customers who buy \texttt{bread} and \texttt{milk} are $25\%$ more likely to buy \texttt{eggs} than a random customer.
+\end{itemize}
+
+\paragraph{Market basket example (negative correlation).} Another example is the rule $\{\texttt{butter}\} \Rightarrow \{\texttt{cheese}\}$, using the Table \ref{tab:market-basket-example}:
+
+\begin{itemize}
+  \item $\mathrm{supp}(\{\texttt{butter}, \texttt{cheese}\}) = \frac{1}{5} = 0.20$, since both items appear together only in transaction $\text{TID}_5$.
+  \item $\mathrm{conf}(\{\texttt{butter}\} \Rightarrow \{\texttt{cheese}\}) = \frac{0.20}{0.60} = 0.33$, since \texttt{butter} appears in three transactions ($\text{TID}_1, \text{TID}_4, \text{TID}_5$), but only one of those transactions contains \texttt{cheese}.
+  \item $\mathrm{lift}(\{\texttt{butter}\} \Rightarrow \{\texttt{cheese}\}) = \frac{0.33}{0.40} = 0.825$, since the support of \texttt{cheese} is $0.40$. This indicates a negative correlation: customers who buy \texttt{butter} are slightly less likely to buy \texttt{cheese} than a random customer.
+\end{itemize}
+
+\subsection{Application to Model Interpretability}
+
+Instead of analyzing frequently purchased products, this thesis leverages the principles of ARM to assess which feature-category combinations are frequently relevant to the classifier's decisions, identifying recurring patterns in the model's decision logic.
+
+In this setting, the set of explanation lists $\mathcal{E}$ is treated as a transaction database (e.g., $\mathcal{E} = \{\mathcal{L}_1, \mathcal{L}_2, \mathcal{L}_3, \mathcal{L}_4, \mathcal{L}_5\}$). A single list $\mathcal{L}_i \in \mathcal{E}$ is treated as a transaction, and each feature-category pair $(X_j = \tilde{x}_{ij})$ within that list is treated as an item. Formally, while $\mathcal{L}_i$ is conceptually introduced as a list of relevant explanations, in the context of Association Rule Mining it is strictly treated as a set of unique feature-category pairs. This structural assumption ensures that subset operations and ARM metrics, such as support and confidence, are rigorously well-defined without the ambiguity of duplicate items.
+
+For example, if $\mathcal{L}_i = \{\texttt{Education}=\texttt{Bachelors}, \ \texttt{Occupation}=\texttt{Tech-support}, \ \texttt{Age}=\texttt{Middle-aged}\}$, then the transaction corresponding to $\mathcal{L}_i$ contains the items $\{\texttt{Education}=\texttt{Bachelors}\}$, $\{\texttt{Occupation}=\texttt{Tech-support}\}$, and $\{\texttt{Age}=\texttt{Middle-aged}\}$.
+
+In this setting $A$ and $B$ are two disjoint itemsets consisting of feature-category pairs. An association rule $A \Rightarrow B$ in market basket analysis suggests that when the items of $A$ appear, $B$ are highly likely to appear as well. In this context, this means that if the feature-category pairs in $A$ are relevant to the model's decision, those in $B$ are also likely to be relevant. ARM thus identifies and quantifies the co-occurrence of specific feature-category pairs across the local explanations, revealing the underlying patterns that drive the model's predictions.
+
+\paragraph{Example (transaction database of feature-category pairs).} Consider a simplified scenario where the adapted BoCSoR method has been applied to a set of boundary instances, yielding the following collection of explanation lists $\mathcal{E}$:
+
+\begin{itemize}    
+  \item $\mathcal{L}_1 = \{\texttt{Education}=\texttt{Bachelors}, \ \texttt{Occupation}=\texttt{Tech-support}, \ \texttt{Age}=\texttt{Middle-aged}\},$
+  \item $\mathcal{L}_2 = \{\texttt{Education}=\texttt{Masters}, \ \texttt{Occupation}=\texttt{Prof-specialty}\},$
+  \item $\mathcal{L}_3 = \{\texttt{Education}=\texttt{Bachelors}, \ \texttt{Occupation}=\texttt{Tech-support}, \ \texttt{Sex}=\texttt{Male}\},$
+  \item $\mathcal{L}_4 = \{\texttt{Age}=\texttt{Senior}\},$
+  \item $\mathcal{L}_5 = \{\texttt{Education}=\texttt{Bachelors}, \ \texttt{Occupation}=\texttt{Tech-support}, \\ \texttt{Age}=\texttt{Middle-aged}, \ \texttt{Sex}=\texttt{Male}\}.$
+\end{itemize}
+
+Each list $\mathcal{L}_i$ is treated as a transaction, and each feature-category pair within that list is treated as an item. The resulting transaction database $\mathcal{E}$ is summarized in Table~\ref{tab:feature-category-transactions}.
+
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabularx}{\textwidth}{>{\centering\arraybackslash}p{0.16\textwidth}|>{\raggedright\arraybackslash}X}
+    \toprule
+    \textbf{Transaction ID} & \textbf{Feature-Category Pairs} \\
+    \midrule
+    $\mathcal{L}_1$ & Education=Bachelors, Occupation=Tech-support, Age=Middle-aged \\
+    $\mathcal{L}_2$ & Education=Masters, Occupation=Prof-specialty \\
+    $\mathcal{L}_3$ & Education=Bachelors, Occupation=Tech-support, Sex=Male \\
+    $\mathcal{L}_4$ & Age=Senior \\
+    $\mathcal{L}_5$ & Education=Bachelors, Occupation=Tech-support, Age=Middle-aged, Sex=Male \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Transaction database of feature-category pairs extracted from local explanations.}
+  \label{tab:feature-category-transactions}
+\end{table}
+
+Inspecting the transaction database in Table~\ref{tab:feature-category-transactions}, several patterns emerge. The pair $(\texttt{Education}=\texttt{Bachelors})$ appears in three transactions ($\mathcal{L}_1, \mathcal{L}_3, \mathcal{L}_5$), as does $(\texttt{Occupation}=\texttt{Tech-support})$ in the same three transactions. This indicates a strong co-occurrence between these two feature-category pairs. In contrast, $(\texttt{Age}=\texttt{Senior})$ appears only in transaction $\mathcal{L}_4$, being less frequently associated with other pairs. Similarly, $(\texttt{Education}=\texttt{Masters})$ and $(\texttt{Occupation}=\texttt{Prof-specialty})$ appear together only in transaction $\mathcal{L}_2$, indicating a specialized pattern that differs from the dominant Bachelors--Tech-support combination. These observations suggest potential correlations between $(\texttt{Education}=\texttt{Bachelors})$ and $(\texttt{Occupation}=\texttt{Tech-support})$, while other combinations appear less systematic.
+
+Support, confidence, and lift metrics are also used in this setting to evaluate association rules; however, their meanings change, as detailed in the following sections:
+
+\paragraph{Support.} The support $\mathrm{supp}(A)$ measures the frequency of an itemset within $\mathcal{E}$:
+
+\begin{equation}
+  \mathrm{supp}(A) = \frac{|\{ \mathcal{L}_i \in \mathcal{E} \mid A \subseteq \mathcal{L}_i \}|}{|\mathcal{E}|}.
+\end{equation}
+
+A high support ensures that the identified pattern is not an outlier but a representative behavior of the model across a significant portion of the boundary instances. For a given rule $A \Rightarrow B$, the support is computed as the ratio of transactions containing both $A$ and $B$ over the total number of transactions. For a rule to be meaningful, both $A$ and $B$ must have sufficiently high support, ensuring that the rule is derived from a substantial number of instances.
+
+\noindent\textbf{Example (support in model interpretability).} Referring to Table~\ref{tab:feature-category-transactions}, the support of various feature-category pairs can be computed as follows:
+
+\begin{itemize}
+  \item $\mathrm{supp}(\{\texttt{Education}=\texttt{Bachelors}\}) = \frac{3}{5} = 0.60$, since \path{Education=Bachelors} appears in transactions $\mathcal{L}_1$, $\mathcal{L}_3$, and $\mathcal{L}_5$.
+  \item $\mathrm{supp}(\{\texttt{Occupation}=\texttt{Tech-support}\}) = \frac{3}{5} = 0.60$, since \path{Occupation=Tech-support} appears in transactions $\mathcal{L}_1$, $\mathcal{L}_3$, and $\mathcal{L}_5$.
+  \item $\mathrm{supp}(\{\texttt{Age}=\texttt{Middle-aged}\}) = \frac{2}{5} = 0.40$, since \path{Age=Middle-aged} appears in transactions $\mathcal{L}_1$ and $\mathcal{L}_5$.
+  \item $\mathrm{supp}(\{\texttt{Education}=\texttt{Bachelors}, \texttt{Occupation}=\texttt{Tech-support}\}) = \frac{3}{5} = 0.60$, since both appear together in transactions $\mathcal{L}_1$, $\mathcal{L}_3$, and $\mathcal{L}_5$.
+\end{itemize}
+
+\paragraph{Confidence.} The confidence $\mathrm{conf}(A \Rightarrow B)$ measures the strength of the inference:
+
+\begin{equation}
+  \mathrm{conf}(A \Rightarrow B) = \frac{\mathrm{supp}(A \cup B)}{\mathrm{supp}(A)}.
+\end{equation}
+
+This metric indicates how often $B$ is relevant when $A$ is relevant. A high confidence value suggests a strong association between the itemsets, indicating that the presence of $A$ is a reliable predictor of the presence of $B$ in the model's decision logic. High-confidence rules are more likely to represent meaningful feature interactions that the model relies on, rather than coincidental co-occurrences.
+
+\noindent\textbf{Example (confidence in model interpretability).} Let
+\[
+  A = \{\texttt{Education}=\texttt{Bachelors}\}, \qquad B = \{\texttt{Occupation}=\texttt{Tech-support}\}.
+\]
+Using Table~\ref{tab:feature-category-transactions}, we obtain:
+
+\begin{itemize}
+  \item Support of the combined itemset: \[\mathrm{supp}(A \cup B) = 0.60.\]
+  \item Support of the antecedent: \[\mathrm{supp}(A) = 0.60.\]
+  \item Confidence: \[\mathrm{conf}(A \Rightarrow B) = \frac{0.60}{0.60} = 1.0.\]
+\end{itemize}
+
+A confidence of $1.0$ indicates that whenever \texttt{Education=Bachelors} appears in an explanation, \texttt{Occupation=Tech-support} is also present: in the model's decision logic, the \texttt{Bachelors} degree always co-occurs with a \texttt{Tech-support} occupation when explaining boundary instance decisions.
+
+\paragraph{Lift.} The lift $\mathrm{lift}(A \Rightarrow B)$ measures the correlation between $A$ and $B$, specifically evaluating whether their co-occurrence is more frequent than expected under the assumption of independence:
+
+\begin{equation}
+  \mathrm{lift}(A \Rightarrow B) = \frac{\mathrm{conf}(A \Rightarrow B)}{\mathrm{supp}(B)}.
+\end{equation}
+
+\begin{itemize}
+  \item If $\mathrm{lift}(A \Rightarrow B) > 1$, then $A$ and $B$ are positively correlated. The presence of $A$ increases the likelihood that $B$ is also relevant to the model's decision.
+  \item If $\mathrm{lift}(A \Rightarrow B) < 1$, then $A$ and $B$ are negatively correlated: the presence of $A$ reduces the likelihood of $B$ being relevant.
+  \item If $\mathrm{lift}(A \Rightarrow B) \approx 1$, then $A$ and $B$ are independent: the presence of $A$ does not affect the relevance of $B$.
+\end{itemize}
+
+\noindent\textbf{Example (lift in model interpretability).} Continuing with the same sets $A$ and $B$ from Table~\ref{tab:feature-category-transactions}, we obtain:
+
+\begin{itemize}
+  \item Confidence: \[\mathrm{conf}(A \Rightarrow B) = 1.0.\]
+  \item Support of the consequent: \[\mathrm{supp}(B) = 0.60.\]
+  \item Lift: \[\mathrm{lift}(A \Rightarrow B) = \frac{1.0}{0.60} \approx 1.67.\]
+\end{itemize}
+
+Since $\mathrm{lift} > 1$, these two feature-category pairs are positively correlated. A lift of $1.67$ means that $\{\texttt{Education}=\texttt{Bachelors}\}$ and $\{\texttt{Occupation}=\texttt{Tech-support}\}$ co-occur in the local explanations approximately $67\%$ more frequently than would be expected by chance. This above-chance co-occurrence indicates a meaningful synergy between these two feature-category pairs in the classifier's decision logic.
+
+In this setting, a window $[1 - \epsilon, 1 + \epsilon]$ is considered around the baseline value of $\mathrm{lift}=1$, where $\epsilon$ is a small positive threshold. Rules with lift values falling within this range are considered to lack significant correlation and are therefore filtered out. This filtering process ensures that only meaningful insights into the model's decision logic are retained, helping to distinguish genuine feature dependencies from spurious associations.
+
+\section{Hierarchical Association Rule Analysis}
+
+Applying ARM directly to the collection of local explanations $\mathcal{E}$ poses two related difficulties. The first is combinatorial: with $n_{\mathrm{cat}}$ features and up to $p_j$ categories per feature, the number of possible feature-category pairs is $\sum_j p_j$, and the number of candidate itemsets of size $k$ grows as $\bigl(\sum_j p_j\bigr)^k$. Even modest values of $n_{\mathrm{cat}}$ yield a prohibitively large rule space.
+
+The second difficulty is interpretive. Many rules that ARM would return as distinct are in fact different manifestations of the same underlying pattern. For instance, the rules $\{\texttt{Education}=\texttt{Bachelors}\} \Rightarrow \{\texttt{Occupation}=\texttt{Tech-support}\}$ and $\{\texttt{Education}=\texttt{Masters}\} \Rightarrow \{\texttt{Occupation}=\texttt{Prof-specialty}\}$ are reported as two independent rules by ARM, yet they both instantiate a single, coarser observation: that the features \texttt{Education} and \texttt{Occupation} tend to be jointly relevant for the model's decisions, regardless of which specific categories are involved. This means that in this setting it is possible to analyze how relevant features co-occur with one another and how combinations of these features represent decision patterns for the model, at two distinct levels of granularity: at the feature level and at the category level within the feature-category pair.
+
+To address both difficulties, the analysis is organized into two levels of granularity:
+
+\begin{itemize}
+  \item The \emph{macroscopic level} discovers the \emph{macroscopic rules} in the transactions of $\mathcal{E}$, namely, rules containing only the \emph{feature} of each feature-category pair. This analysis considers only the feature and ignores category values in the transactions of feature-category pairs. It therefore observes whether and how features are jointly relevant in the model's decisions, providing an overview that abstracts from the specific categories involved. This analysis yields rules such as $\{\texttt{Education}\} \Rightarrow \{\texttt{Occupation}\}$, which state that the relevance of the feature \texttt{Education} is associated with the relevance of the feature \texttt{Occupation}, without specifying which categories of these features are involved.
+  \item The \emph{microscopic level} discovers the \emph{microscopic rules} in the transactions of $\mathcal{E}$, namely, rules containing the full \emph{feature-category pair}. This analysis considers the full feature-category pairs, and it is based on the macroscopic rules produced in the macroscopic analysis. Given a macroscopic rule, the analysis at the microscopic level considers only transactions that contain categories in the feature-category pairs belonging to all features of the considered macroscopic rule. This analysis delves into the details of relevant categories for the model decisions, providing a more granular view. The analysis at the microscopic level is repeated for each macroscopic rule, and it yields rules such as $\{\texttt{Education}=\texttt{Bachelors}\} \Rightarrow \{\texttt{Occupation}=\texttt{Tech-support}\}$, which state that the relevance of the category \texttt{Bachelors} of the feature \texttt{Education} is associated with the relevance of the category \texttt{Tech-support} of the feature \texttt{Occupation}.
+\end{itemize}
+
+\subsection{Macroscopic Analysis}
+
+The set of feature indices appearing in a local explanation (transaction) $\mathcal{L}_i$ is denoted by $\mathcal{M}_i$:
+
+\begin{equation}
+  \mathcal{M}_i = \{\, X_j \mid (X_j = \tilde{x}_{ij}) \in \mathcal{L}_i \,\}.
+\end{equation}
+
+Each $\mathcal{M}_i$ is the macroscopic transaction associated with the $i$-th boundary instance $\tilde{x}_i$: it records only the features which were relevant for that instance, namely the features $X_j$ in the feature-category pairs contained in the corresponding local explanation $\mathcal{L}_i$, not which categories they assumed. The set which collects all macroscopic transactions for all instances is denoted by $\mathcal{M}$:
+
+\begin{equation}
+  \mathcal{M} = \{\mathcal{M}_i \mid \mathcal{L}_i \in \mathcal{E}\}.
+\end{equation}
+
+Running ARM on $\mathcal{M}$ therefore yields rules of the form $A_{\mathrm{macro}} \Rightarrow B_{\mathrm{macro}}$, where $A_{\mathrm{macro}}$ and $B_{\mathrm{macro}}$ are disjoint sets of feature indices. Each such rule is defined as a macroscopic association rule. These rules are measured by their support, confidence, and lift, as defined in Section~\ref{sec:arm-foundations}. Given the thresholds $\tau_{\mathrm{supp}}$ for support, $\tau_{\mathrm{conf}}$ for confidence, and $\epsilon$ for the half-width of the lift independence window around $1$, the candidate rules are filtered to obtain the set $\mathcal{R}_{\mathrm{macro}}$ of macroscopic rules retained for further analysis. Examples of macroscopic rules are $\{\texttt{Education}\} \Rightarrow \{\texttt{Occupation}\}$, $\{\texttt{Education}, \texttt{Age}\} \Rightarrow \{\texttt{Occupation}\}$, and $\{\texttt{Education}, \texttt{Occupation}\} \Rightarrow \{\texttt{Age}\}$, which state that the relevance of the feature \texttt{Education} is associated with the relevance of the feature \texttt{Occupation}, that the relevance of the features \texttt{Education} and \texttt{Age} is associated with the relevance of the feature \texttt{Occupation}, and that the relevance of the features \texttt{Education} and \texttt{Occupation} is associated with the relevance of the feature \texttt{Age}, respectively. The procedure of macroscopic analysis is illustrated in Algorithm~\ref{alg:macro-arm}.
+
+\begin{algorithm}[H]
+  \caption{Macroscopic Association Rule Analysis}\label{alg:macro-arm}
+  \begin{algorithmic}[1]
+    \Statex \textbf{Input:}
+    \Statex \quad $\mathcal{E}$: Collection of local explanations produced by \textsc{AdaptedBoCSoR}
+    \Statex \quad $\tau_{\mathrm{supp}}$: Minimum support threshold
+    \Statex \quad $\tau_{\mathrm{conf}}$: Minimum confidence threshold
+    \Statex \quad $\epsilon$: Half-width of the lift independence window around $1$
+    \Statex \textbf{Output:}
+    \Statex \quad $\mathcal{R}_{\mathrm{macro}}$: Set of macroscopic rules (structural dependencies between features)
+    \Procedure{MacroARM}{$\mathcal{E},\, \tau_{\mathrm{supp}},\, \tau_{\mathrm{conf}},\, \epsilon$}
+      \State $\mathcal{M} \gets \emptyset$ \Comment{Initialize the set of macroscopic transactions}
+      \For{$\mathcal{L}_i \in \mathcal{E}$}
+        \State $\mathcal{M}_i \gets \{\, X_j : (X_j = \tilde{x}_{ij}) \in \mathcal{L}_i \,\}$ \Comment{Drop categories, keep feature indices}
+        \State $\mathcal{M} \gets \mathcal{M} \cup \{\mathcal{M}_i\}$
+      \EndFor
+      \State $\textit{candidates} \gets$ association rules $A \Rightarrow B$ mined from $\mathcal{M}$ \Comment{Run ARM on feature-index transactions}
+      \State $\mathcal{R}_{\mathrm{macro}} \gets \emptyset$ \Comment{Initialize the filtered rule set}
+      \For{$R \in \textit{candidates}$}
+        \If{$\mathrm{supp}(R) \geq \tau_{\mathrm{supp}}$ \textbf{and} $\mathrm{conf}(R) \geq \tau_{\mathrm{conf}}$ \textbf{and} $\mathrm{lift}(R) \notin [1-\epsilon,\, 1+\epsilon]$}
+          \State $\mathcal{R}_{\mathrm{macro}} \gets \mathcal{R}_{\mathrm{macro}} \cup \{R\}$ \Comment{Keep strong, non-independence rules}
+        \EndIf
+      \EndFor
+      \State \Return $\mathcal{R}_{\mathrm{macro}}$
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Microscopic Analysis}
+
+The microscopic analysis is based on the macroscopic rules obtained from the macroscopic analysis and it is designed to discover category-level rules, called microscopic rules $A_{\mathrm{micro}} \Rightarrow B_{\mathrm{micro}}$, that explore the finer details of the categories $\tilde{x}_{ij}$ influencing the model's outcomes, providing deeper insight. Given a macroscopic rule $R$, the set $\mathcal{E}_R \subseteq \mathcal{E}$ is defined as the subset of transactions of $\mathcal{E}$ containing categories $\tilde{x}_{ij}$ in the feature-category pairs belonging to all features $X_j$ in $R$:
+
+\begin{equation}
+  \mathcal{E}_R = \bigl\{\, \mathcal{L}_i \in \mathcal{E} \;\bigm|\;
+  \forall\, X_j \in A_{\mathrm{macro}} \cup B_{\mathrm{macro}},\;
+  \exists\, \tilde{x}_{ij} \text{ such that } (X_j = \tilde{x}_{ij}) \in \mathcal{L}_i \,\bigr\}.
+\end{equation}
+
+Restricting the analysis to $\mathcal{E}_R$ rather than running it on the whole $\mathcal{E}$ is what makes the rules mined at the microscopic level interpretable as specializations of $R$. If category-level rules were mined on the full $\mathcal{E}$, specializations of different macroscopic rules would be mixed together in the output, and no category-level rule could be attributed unambiguously to a specific macroscopic parent. By contrast, every rule obtained from $\mathcal{E}_R$ refines, by construction, the pattern and the correlation expressed by $R$.
+
+The support of any itemset inside $\mathcal{E}_R$ is bounded by $|\mathcal{E}_R|$, which is typically much smaller than $|\mathcal{E}|$, so even a category-specific pattern that is common relative to $\mathcal{E}_R$ may have low absolute support. In addition, within $\mathcal{E}_R$ the support of each feature in $A_{\mathrm{macro}} \cup B_{\mathrm{macro}}$ is split among its categories: if $\mathcal{E}_R$ contains transactions distributed across several categories of the same feature, none of the resulting category-level pairs can individually achieve high support. For these reasons the microscopic analysis uses support and confidence thresholds $\tau_{\mathrm{supp}}^{\mathrm{micro}} < \tau_{\mathrm{supp}}^{\mathrm{macro}}$ and $\tau_{\mathrm{conf}}^{\mathrm{micro}} < \tau_{\mathrm{conf}}^{\mathrm{macro}}$, so that genuine category-level specializations can surface even when their absolute frequency is low. The lift filter $[1-\epsilon, 1+\epsilon]$ is retained to continue excluding rules that merely reflect chance co-occurrence.
+
+For each macroscopic rule $R \in \mathcal{R}_{\mathrm{macro}}$, the microscopic analysis produces a corresponding set of microscopic rules $\mathcal{R}_{\mathrm{micro}}(R)$, obtained by running ARM on $\mathcal{E}_R$ and applying the filters above. The overall output of the microscopic analysis is therefore the mapping $\mathcal{R}_{\mathrm{micro}} : \mathcal{R}_{\mathrm{macro}} \to \mathcal{R}_{\mathrm{micro}}(R)$, which associates to each macroscopic rule the set of its category-level specializations.
+
+Consider the collection of Table~\ref{tab:feature-category-transactions}, where $|\mathcal{E}| = 5$. The macroscopic projections are
+
+\begin{equation*}
+  \begin{aligned}
+    \mathcal{M}_1 &= \{\texttt{Education}, \texttt{Occupation}, \texttt{Age}\}, \\
+    \mathcal{M}_2 &= \{\texttt{Education}, \texttt{Occupation}\}, \\
+    \mathcal{M}_3 &= \{\texttt{Education}, \texttt{Occupation}, \texttt{Sex}\}, \\
+    \mathcal{M}_4 &= \{\texttt{Age}\}, \\
+    \mathcal{M}_5 &= \{\texttt{Education}, \texttt{Occupation}, \texttt{Age}, \texttt{Sex}\}.
+  \end{aligned}
+\end{equation*}
+
+The macroscopic rule $R : \{\texttt{Education}\} \Rightarrow \{\texttt{Occupation}\}$ has support $4/5 = 0.80$ on $\mathcal{M}$ (both features co-occur in $\mathcal{M}_1, \mathcal{M}_2, \mathcal{M}_3, \mathcal{M}_5$) and confidence $1.0$: whenever \texttt{Education} is relevant, \texttt{Occupation} is relevant as well. The set $\mathcal{E}_R$ contains exactly the four transactions $\{\mathcal{L}_1, \mathcal{L}_2, \mathcal{L}_3, \mathcal{L}_5\}$. Running ARM on $\mathcal{E}_R$ yields the microscopic rule $\{\texttt{Education}{=}\texttt{Bachelors}\} \Rightarrow \{\texttt{Occupation}{=}\texttt{Tech-support}\}$ with support $3/4 = 0.75$ and confidence $1.0$, together with the weaker specialization $\{\texttt{Education}{=}\texttt{Masters}\} \Rightarrow \{\texttt{Occupation}{=}\texttt{Prof-specialty}\}$ with support $1/4 = 0.25$ and confidence $1.0$. The macroscopic rule $R$ has thus been decomposed into its constituent categorical instantiations, each annotated with its own strength.
+
+Examples of microscopic rules are \path{Education=Bachelors => Occupation=Tech-support}, \path{Education=Masters => Occupation=Prof-specialty}, and \path{Education=Bachelors, Age=Middle-aged => Occupation=Tech-support}. These examples state, respectively, that the relevance of the category \texttt{Bachelors} of the feature \texttt{Education} is associated with the relevance of the category \texttt{Tech-support} of the feature \texttt{Occupation}; that the relevance of the category \texttt{Masters} of the feature \texttt{Education} is associated with the relevance of the category \texttt{Prof-specialty} of the feature \texttt{Occupation}; and that the joint relevance of the categories \texttt{Bachelors} and \texttt{Middle-aged} of the features \texttt{Education} and \texttt{Age} is associated with the relevance of the category \texttt{Tech-support} of the feature \texttt{Occupation}.
+
+The microscopic analysis is illustrated in Algorithm~\ref{alg:micro-arm}.
+
+\begin{algorithm}[H]
+  \caption{Microscopic Association Rule Analysis}\label{alg:micro-arm}
+  \begin{algorithmic}[1]
+    \Statex \textbf{Input:}
+    \Statex \quad $\mathcal{E}$: Collection of local explanations produced by \textsc{AdaptedBoCSoR}
+    \Statex \quad $\mathcal{R}_{\mathrm{macro}}$: Set of macroscopic rules produced by \textsc{MacroARM}
+    \Statex \quad $\tau_{\mathrm{supp}}$: Minimum support threshold (microscopic level)
+    \Statex \quad $\tau_{\mathrm{conf}}$: Minimum confidence threshold (microscopic level)
+    \Statex \quad $\epsilon$: Half-width of the lift independence window around $1$
+    \Statex \textbf{Output:}
+    \Statex \quad $\mathcal{R}_{\mathrm{micro}}$: Mapping that associates to each macroscopic rule $R \in \mathcal{R}_{\mathrm{macro}}$ the corresponding set $\mathcal{R}_{\mathrm{micro}}(R)$ of category-level specializations
+    \Procedure{MicroARM}{$\mathcal{E},\, \mathcal{R}_{\mathrm{macro}},\, \tau_{\mathrm{supp}},\, \tau_{\mathrm{conf}},\, \epsilon$}
+      \State initialize $\mathcal{R}_{\mathrm{micro}}$ as an empty mapping \Comment{One entry per macroscopic rule}
+      \For{each macroscopic rule $R : A_{\mathrm{macro}} \Rightarrow B_{\mathrm{macro}} \in \mathcal{R}_{\mathrm{macro}}$}
+        \State $\mathcal{E}_R \gets \emptyset$ \Comment{Initialize the subset for $R$}
+        \For{$\mathcal{L}_i \in \mathcal{E}$}
+          \If{every feature $X_j \in A_{\mathrm{macro}} \cup B_{\mathrm{macro}}$ appears in $\mathcal{L}_i$} \Comment{Recall that $A_{\mathrm{macro}} \cup B_{\mathrm{macro}}$ is the set of features in $R$}
+            \State $\mathcal{E}_R \gets \mathcal{E}_R \cup \{\mathcal{L}_i\}$ \Comment{Retain transactions consistent with $R$}
+          \EndIf
+        \EndFor
+        \State $\textit{candidates} \gets$ association rules on feature-category pairs mined from $\mathcal{E}_R$ \Comment{Run ARM for microscopic rules within $\mathcal{E}_R$}
+        \State $\mathcal{R}_{\mathrm{micro}}(R) \gets \emptyset$ \Comment{Initialize the microscopic rule set for $R$}
+        \For{$r \in \textit{candidates}$}
+          \If{$\mathrm{supp}(r) \geq \tau_{\mathrm{supp}}$ \textbf{and} $\mathrm{conf}(r) \geq \tau_{\mathrm{conf}}$ \textbf{and} $\mathrm{lift}(r) \notin [1-\epsilon,\, 1+\epsilon]$}
+            \State $\mathcal{R}_{\mathrm{micro}}(R) \gets \mathcal{R}_{\mathrm{micro}}(R) \cup \{r\}$ \Comment{Keep strong, non-independence specializations}
+          \EndIf
+        \EndFor
+      \EndFor
+      \State \Return $\mathcal{R}_{\mathrm{micro}}$
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
+
+Together, $\mathcal{R}_{\mathrm{macro}}$ and $\mathcal{R}_{\mathrm{micro}}(R)$ provide a two-layered description of the model's decision logic: the former identifies which features tend to be jointly relevant for the model's decisions, the latter specifies which categorical combinations realize each of these relationships.

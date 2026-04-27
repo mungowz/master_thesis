@@ -1,0 +1,260 @@
+% !BIB program = biber
+% !TeX root = main.tex
+
+\documentclass[a4paper,12pt]{report}
+
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{csquotes}
+\usepackage{vmargin}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{mathtools}
+\usepackage{tikz}
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage[style=ieee,sorting=none,backend=biber,defernumbers=true]{biblatex}
+\addbibresource{bibliography.bib}
+\setcounter{biburllcpenalty}{7000}
+\setcounter{biburlucpenalty}{8000}
+\setcounter{biburlnumpenalty}{9000}
+
+\setmarginsrb{35mm}{30mm}{30mm}{30mm}{0mm}{10mm}{0mm}{10mm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=black,
+  linktoc=all,
+  bookmarksopen=true,
+  plainpages=false
+}
+
+\setlength{\parindent}{1cm}
+\setlength{\parskip}{0pt}
+\onehalfspacing
+\setlength{\emergencystretch}{2em}
+\hfuzz=10pt
+\hbadness=10000
+
+\titleformat{\chapter}[display]
+  {\bfseries\fontsize{16pt}{18pt}\selectfont}
+  {\chaptertitlename\ \thechapter}
+  {1ex}
+  {}
+\titleformat{\section}
+  {\bfseries\fontsize{14pt}{16pt}\selectfont}
+  {\thesection}
+  {1em}
+  {}
+\titleformat{\subsection}
+  {\bfseries\fontsize{12pt}{14pt}\selectfont}
+  {\thesubsection}
+  {1em}
+  {}
+
+\captionsetup{justification=centering}
+\captionsetup[table]{position=top,font=small,labelfont=bf,justification=centering,singlelinecheck=false,skip=6pt}
+\AtBeginEnvironment{figure}{\centering\captionsetup{position=bottom}}
+\AtBeginEnvironment{table}{\centering\small}
+\AtBeginEnvironment{algorithm}{\captionsetup{position=top,font=small,labelfont=bf,textfont=it}}
+\floatname{algorithm}{Algorithm}
+\floatstyle{ruled}
+\restylefloat{algorithm}
+\setlength{\textfloatsep}{16pt plus 2pt minus 2pt}
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.12}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
+
+\lstdefinestyle{thesiscode}{
+  basicstyle=\ttfamily\fontsize{10.5pt}{12pt}\selectfont,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  rulecolor=\color{gray!40},
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  showstringspaces=false,
+  keepspaces=true,
+  breaklines=true,
+  tabsize=2,
+  numbers=left,
+  numberstyle=\tiny\color{gray!70},
+  stepnumber=1,
+  numbersep=8pt,
+  captionpos=b
+}
+\lstset{style=thesiscode}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{200,200,200}
+\definecolor{codekw}{RGB}{0,112,32}
+\definecolor{codecomment}{RGB}{96,96,96}
+\definecolor{codestr}{RGB}{186,33,33}
+
+\lstdefinestyle{pipeline}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestr},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  breakatwhitespace=false,
+  showstringspaces=false,
+  tabsize=4,
+  xleftmargin=1.5em,
+  framexleftmargin=1em,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  captionpos=b,
+  aboveskip=1em,
+  belowskip=0.5em,
+  morekeywords={as,with,None,True,False,self},
+}
+
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+\algrenewcommand\algorithmiccomment[1]{\hfill\footnotesize\upshape\color{black}(#1)}
+\algrenewcommand\algorithmicindent{1.35em}
+\algrenewcommand\algorithmicprocedure{\textbf{Procedure}}
+\algrenewcommand\algorithmicend{\textbf{end}}
+\algrenewcommand\alglinenumber[1]{\footnotesize\color{black!85}#1}
+\AtBeginEnvironment{algorithmic}{\small}
+
+\makeatletter
+\renewcommand\footnotesize{\@setfontsize\footnotesize{10pt}{12pt}}
+\makeatother
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\pagestyle{empty}
+
+% Master thesis title page
+{\thispagestyle{empty}
+
+\vskip 1cm \large \centerline{\textsc{University of Naples Parthenope}}
+\centerline{\textsc{Department of Science and Technologies}}
+\centerline{\small\textsc{Master's Degree in Applied Computer Science in Machine Learning \& Big Data}}
+
+\vskip 1.0cm
+\begin{center}
+\includegraphics[scale=0.20]{assets/logo_uniparthenope.png}
+\end{center}
+
+\vskip 0.5cm
+\large \centerline{\textsc{Master's Thesis}}
+
+\vskip 1.5cm
+\Large \centerline{Feature-Driven Bias Detection}
+\vskip 0.4cm
+\large \centerline{An Association Rule Mining Approach to Analyze Feature Importance}
+
+\vskip 2.0cm
+\large
+\begin{minipage}[t]{7cm}
+\raggedright
+\textsc{Supervisor}
+
+\textbf{Prof. Antonio Maratea}
+\vskip 0.6em
+\textsc{Examiner}
+
+\textbf{Prof. Francesco Camastra}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{5.8cm}
+\textsc{Candidate}
+
+\textbf{Alfredo Mungari}\\
+\textbf{Student ID 0120000287}
+\end{minipage}
+
+\vskip 2em \Large \centerline{Academic Year 2024/2025}
+\vskip 0.2em
+\noindent\makebox[\textwidth][c]{\rule{0.55\textwidth}{0.5pt}}\par
+\newpage}
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Modern tabular classifiers achieve strong predictive performance but remain opaque to inspection, particularly when their decisions involve demographic attributes. This thesis proposes a pipeline that combines counterfactual-based feature importance with hierarchical Association Rule Mining to produce a global, human-readable interpretation of a classifier's decision logic. The pipeline adapts the BoCSoR method from continuous to fully categorical data through a hybrid encoding and a Manhattan distance formulation, replacing continuous interpolation with the union of relevant feature-category pairs across $k$ observed opposite-class neighbors. The resulting local explanations are aggregated by a two-level mining procedure: a macroscopic level identifies structural dependencies at the feature-name level, and a microscopic level instantiates each surviving dependency with specific category values. A conservative semantic classification separates \emph{actionable} rules, involving only modifiable attributes, from \emph{biased} rules, involving protected demographic features. The pipeline is validated on five geographical benchmarks built from the 2024 American Community Survey (approximately 1.75 million records), using two structurally different classifiers (CatBoost and MLP) and a systematic grid search over support and confidence. The empirical study reveals a consistent geographic asymmetry: more affluent benchmarks (Northeast, New York) are dominated by actionable rules, while benchmarks with higher poverty concentration (Texas, South) are dominated by biased rules, with bias-to-actionable ratios ranging from $1.3\times$ to $11.8\times$. Race-occupation entanglement is the dominant biased signature in four of the five scopes, while the South uniquely exhibits a race-geography pattern. Rules at the higher-income boundary emerge only in New York. The main contributions are the adaptation of BoCSoR to categorical data, the hierarchical mining design, the semantic classification of rules, and the empirical characterization across U.S.\ census benchmarks.
+
+\newpage
+\tableofcontents
+\listoffigures
+\listoftables
+
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\pagestyle{plain}
+\hypersetup{pageanchor=true}
+
+\chapter{Introduction}
+\label{cap:introduction}
+\input{chapters/introduction}
+
+\chapter{State of the Art and Related Work}
+\label{cap:state-of-the-art}
+\input{chapters/state_of_the_art}
+
+\chapter{Data and Dataset Construction}
+\label{cap:data}
+\input{chapters/data}
+
+\chapter{Proposed Method}
+\label{cap:method}
+\input{chapters/method}
+
+\chapter{Experimental Results}
+\label{cap:results}
+\input{chapters/results}
+
+\chapter{Conclusions and Future Work}
+\label{cap:conclusions}
+\input{chapters/conclusions}
+
+\clearpage
+\nocite{*}
+\printbibliography[
+  title={References},
+  nottype=online,
+  heading=bibintoc
+]
+
+\printbibliography[
+  title={Web References},
+  type=online,
+  heading=bibintoc
+]
+
+\newpage
+\appendix
+\titleformat{\chapter}[display]
+  {\bfseries\fontsize{16pt}{18pt}\selectfont}
+  {}
+  {0pt}
+  {}
+\input{chapters/appendix}
+
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+\input{chapters/acknowledgements}
+
+\end{document}

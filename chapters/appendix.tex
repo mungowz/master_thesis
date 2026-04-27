@@ -1,0 +1,648 @@
+% !TEX root = ../main.tex
+
+\chapter{Pipeline Implementation Details}
+\label{app:pipeline-implementation}
+
+\section{Parallelization Strategy}
+\label{app:parallelization}
+
+Pipeline scalability is essential, since the national dataset includes over $1.4$ million training instances.
+The adopted parallelization strategy uses Python's standard-library module \texttt{concurrent.\allowbreak futures}, combining process pools and thread pools depending on workload type.
+
+\paragraph{Global Interpreter Lock and motivation of the concurrency choice.}
+CPython is subject to the Global Interpreter Lock (GIL), which prevents simultaneous execution of Python bytecode by multiple threads in the same process.
+For purely \texttt{CPU-bound} operations (e.g., independent processing of different years), independent processes are used (\texttt{ProcessPoolExecutor}), each with its own GIL.
+For \texttt{I/O-bound} operations (census-data download, disk writing), threads are used (\texttt{ThreadPoolExecutor}), since system calls release the GIL while waiting.
+For numerically intensive stage-2 operations (distance computation, model predictions), \texttt{ThreadPoolExecutor} is also used despite CPU-bound behavior, because underlying libraries (SciPy \texttt{cdist}, CatBoost, scikit-learn) are implemented in C/Cython and release the GIL during native computation, enabling true concurrency among threads.
+This choice also avoids using \texttt{fork()} with BLAS libraries such as Apple Accelerate, whose internal state may not survive process duplication, causing non-deterministic deadlocks on macOS.
+
+\paragraph{Memory sharing among workers.}
+Where \texttt{ProcessPool\allowbreak Executor} is used (stage~1 multi-year), child processes are created with \texttt{spawn}: the child process is initialized from scratch, re-importing required modules without inheriting parent-process state.
+This is the default behavior on macOS and Windows and is explicitly enforced by the pipeline for safety with BLAS libraries, as shown in Listing~\ref{lst:spawn-method}.
+
+\begin{lstlisting}[style=pipeline,caption={Explicit \texttt{spawn} start method enforcement (\texttt{src/main.py}).},label={lst:spawn-method}]
+def main() -> None:
+    multiprocessing.set_start_method("spawn", force=True)
+    parser = build_parser()
+    args   = parser.parse_args()
+\end{lstlisting}
+
+In stage~2 and stage~4, where sharing concerns large objects and intensive numerical kernels, \texttt{ThreadPoolExecutor} is preferred: threads directly share parent-process heap memory without duplication, serialization, or process-start overhead, and avoid macOS deadlocks potentially induced by forking BLAS/Accelerate internal mutex state.
+
+The number of workers is auto-detected at startup (Listing~\ref{lst:workers}), reserving 2 logical CPUs for the OS and the main process, and capping at 14 to prevent competing internal thread pools (CatBoost, SciPy) from degrading throughput.
+
+\begin{lstlisting}[style=pipeline,caption={Worker count auto-detection (\texttt{src/main.py}).},label={lst:workers}]
+# Formula: max(1, min(14, cpu_count - 2)).
+# Reserves 2 logical CPUs for the OS and the main process; caps at 14
+# to avoid competing CatBoost thread pools degrading throughput.
+_DEFAULT_WORKERS = max(1, min(14, (os.cpu_count() or 4) - 2))
+\end{lstlisting}
+
+\paragraph{Stage~1 --- Download and preprocessing.}\fussy
+Microdata download for each state is executed in parallel via \texttt{ThreadPoolExecutor} (up to 16 threads), leveraging GIL release during network calls.
+Listing~\ref{lst:download-parallel} shows the parallel download implementation.
+
+\begin{lstlisting}[style=pipeline,caption={Parallel per-state download via \texttt{ThreadPoolExecutor} (\texttt{src/create\_dataset.py}).},label={lst:download-parallel}]
+n_workers = min(_IO_WORKERS, len(states))   # _IO_WORKERS = min(16, cpu_count)
+
+with ThreadPoolExecutor(max_workers=n_workers) as executor:
+    future_to_state = {
+        executor.submit(
+            _download_one_state,
+            state, survey_year, horizon, survey, raw_dir,
+        ): state
+        for state in states
+    }
+    for future in as_completed(future_to_state):
+        state = future_to_state[future]
+        try:
+            frames[state] = future.result()
+        except Exception as exc:
+            failures.append(state)
+
+# Concatenate in the original order for reproducibility.
+df = pd.concat([frames[s] for s in states if s in frames], ignore_index=True)
+\end{lstlisting}
+
+Column categorization uses vectorized NumPy and pandas operations (e.g., \texttt{np.searchsorted}, type casting, and column-wise mapping) that release the GIL in the dominant native kernels, and is parallelized through \texttt{ThreadPoolExecutor} (up to 8 threads).
+Each column transform is independent and dispatched as a separate task (Listing~\ref{lst:categorize-parallel}).
+
+\begin{lstlisting}[style=pipeline,caption={Parallel column categorization (\texttt{src/create\_dataset.py}).},label={lst:categorize-parallel}]
+def categorize(df: pd.DataFrame) -> pd.DataFrame:
+    transforms = [
+        (col, fn) for col, fn in _build_column_transforms()
+        if col in df.columns
+    ]
+    results: dict[str, pd.Series] = {}
+
+    def _apply(col, fn, series):
+        return col, fn(series)
+
+    with ThreadPoolExecutor(
+        max_workers=min(_CAT_WORKERS, len(transforms))  # _CAT_WORKERS = min(8, cpu_count)
+    ) as executor:
+        futures = {
+            executor.submit(_apply, col, fn, df[col].copy()): col
+            for col, fn in transforms
+        }
+        for future in as_completed(futures):
+            col, result = future.result()
+            results[col] = result
+
+    # Reassemble in the original column order.
+    out = df.copy()
+    for col in df.columns:
+        if col in results:
+            out[col] = results[col]
+    return out
+\end{lstlisting}
+
+The three output CSV files (dataset, train, test) are written concurrently with a 3-thread pool.
+In multi-year runs, creation of each yearly dataset is delegated to an independent process via \texttt{ProcessPoolExecutor} (Listing~\ref{lst:multi-year}).
+
+\begin{lstlisting}[style=pipeline,caption={Multi-year parallel execution via \texttt{ProcessPoolExecutor} (\texttt{src/main.py}).},label={lst:multi-year}]
+# Multiple years: one process per year (CPU-bound + independent I/O).
+workers = min(args.workers, len(args.years))
+
+with ProcessPoolExecutor(max_workers=workers) as executor:
+    future_to_year = {
+        executor.submit(_process_year, year=y, **common_kwargs): y
+        for y in args.years
+    }
+    for future in as_completed(future_to_year):
+        y = future_to_year[future]
+        try:
+            _, n_train, n_test = future.result()
+            completed[y] = (n_train, n_test)
+        except Exception as exc:
+            failed.append(y)
+\end{lstlisting}
+
+\paragraph{Stage~2 --- BoCSoR.}
+This is the most computationally expensive stage.
+The equivalent global Manhattan formulation introduced in Chapter~\ref{cap:method}
+is advantageous here because it makes it possible to compute distances on the
+full encoded representation in a single, uniform way. This simplifies the
+execution flow and supports the optimization strategies adopted in the
+pipeline.
+Main optimizations are:
+
+\begin{itemize}
+  \item \textbf{Brute-force nearest-neighbor index}: scikit-learn's nearest-neighbor implementation is used with \texttt{algorithm=\textquotesingle brute\textquotesingle} and Manhattan metric.
+  At 147 encoded dimensions, this is faster than tree-based methods (BallTree, KDTree), which degrade due to the curse of dimensionality.
+  Two distinct indices are built (Listing~\ref{lst:nn-indices}): one with \texttt{n\_jobs=-1} for the initial boundary selection (multi-core via joblib, safe because the loky backend uses spawn-like semantics), and one with \texttt{n\_jobs=1} shared across \texttt{ThreadPoolExecutor} workers for the $k$-NN queries (avoids oversubscription from nested thread pools).
+
+\begin{lstlisting}[style=pipeline,caption={Two NN index configurations for boundary selection and worker queries (\texttt{src/feature\_importance.py}).},label={lst:nn-indices}]
+# Boundary selection: multi-core via joblib (loky backend, spawn-safe).
+cf_nn_boundary = NearestNeighbors(
+    algorithm="brute", metric="manhattan", n_jobs=-1,
+)
+cf_nn_boundary.fit(X_enc_cf.astype(np.float32))
+min_dists, _ = cf_nn_boundary.kneighbors(X_orig_q, n_neighbors=1)
+del cf_nn_boundary   # free memory -- no longer needed
+
+# Worker NN index: n_jobs=1 (shared by ThreadPoolExecutor workers).
+# Each thread calls kneighbors() concurrently; SciPy cdist (Cython)
+# releases the GIL, enabling true thread-level parallelism.
+def build_nn_index(X_enc):
+    nn = NearestNeighbors(
+        algorithm="brute",
+        metric="manhattan",
+        n_jobs=1,
+    )
+    nn.fit(X_enc.astype(np.float32))
+    return nn
+\end{lstlisting}
+
+  \item \textbf{Single encoding pass}: the hybrid-encoded matrix (\textasciitilde560~MB in \texttt{float32} for the national dataset) is built once before the loop over $k$ values and reused for all $k$.
+  Listing~\ref{lst:encode-hybrid} shows the pre-allocated encoding strategy.
+
+\begin{lstlisting}[style=pipeline,caption={Pre-allocated hybrid encoding (\texttt{src/feature\_importance.py}).},label={lst:encode-hybrid}]
+def encode_hybrid(df, rank_maps, nominal_maps, feature_cols):
+    n = len(df)
+    total_cols = n_encoded_cols(feature_cols, rank_maps, nominal_maps)
+    # Pre-allocate: one contiguous block instead of many small arrays.
+    out = np.empty((n, total_cols), dtype=np.float32)
+    col_ptr = 0
+
+    for col in feature_cols:
+        if col in rank_maps:
+            # Ordinal: rank -> min-max normalised to [0, 1]
+            rmap     = rank_maps[col]
+            max_rank = max(rmap.values())
+            denom    = float(max_rank - 1) if max_rank > 1 else 1.0
+            norm_map = {cat: (rank - 1) / denom for cat, rank in rmap.items()}
+            out[:, col_ptr] = (
+                df[col].map(norm_map).fillna(0.5)
+                .to_numpy(dtype=np.float32)
+            )
+            col_ptr += 1
+        else:
+            # Nominal: one-hot / 2 -> each bit in {0.0, 0.5}
+            cats = nominal_maps.get(col, [])
+            col_vals = df[col].to_numpy()
+            for cat in cats:
+                out[:, col_ptr] = (col_vals == cat).astype(np.float32) * 0.5
+                col_ptr += 1
+    return out
+\end{lstlisting}
+
+  \item \textbf{Precomputed $k$-NN query}: the brute-force $k$-NN query is executed once with $k_{\text{query}}$ sized for the maximum $k$ value.
+  Because the top-$k_1$ neighbours are always a prefix of the top-$k_2$ results ($k_1 < k_2$), a single query suffices for all $k$ values.
+  Each per-$k$ run slices the first $k$ valid neighbours from the same precomputed arrays, eliminating $|\mathcal{K}|-1$ redundant $O(N \times M)$ distance computations (Listing~\ref{lst:nn-precompute}).
+
+\begin{lstlisting}[style=pipeline,caption={Single $k$-NN precomputation reused across all $k$ values (\texttt{src/feature\_importance.py}).},label={lst:nn-precompute}]
+max_k = max(k_values)
+k_query_global = min(max(max_k * 50, 200), n_cf)
+
+shared_nn: list[tuple[np.ndarray, np.ndarray]] = []
+for chunk in shared_chunks:
+    chunk_q = X_enc[chunk].astype(np.float32)
+    dists_c, tops_c = cf_nn.kneighbors(chunk_q, n_neighbors=k_query_global)
+    shared_nn.append((dists_c, tops_c))
+# Reused across all k values -- no redundant O(N*M) computations.
+\end{lstlisting}
+
+  \item \textbf{Batch prediction}: for each boundary instance, all modified instances (one per counterfactual-feature pair, across all $k$ counterfactuals) are concatenated into a single pre-allocated NumPy array and passed to \texttt{model.predict()} in one call (Listing~\ref{lst:batch-predict}), eliminating per-feature Python round-trip overhead.
+
+\begin{lstlisting}[style=pipeline,caption={Batched relevance check --- Algorithm~2 of BoCSoR (\texttt{src/feature\_importance.py}).},label={lst:batch-predict}]
+# Build one modified instance per (counterfactual, differing_feature) pair.
+batch_meta: list[tuple[int, int]] = []    # (cf_idx, feature_index)
+for cf_idx in cf_idxs:
+    cf_vals = X_train_values[cf_idx]
+    for fi in range(n_features):
+        if cf_vals[fi] != instance_vals[fi]:
+            batch_meta.append((cf_idx, fi))
+
+# Pre-allocate the batch array.
+batch_array = np.empty((len(batch_meta), n_features), dtype=object)
+for i, (cf_idx, fi) in enumerate(batch_meta):
+    row = X_train_values[cf_idx].copy()
+    row[fi] = instance_vals[fi]      # swap back to original value
+    batch_array[i] = row
+
+# Single predict call for all (counterfactual, feature) pairs.
+preds = model.predict(batch_array, thread_count=1).ravel()
+\end{lstlisting}
+
+  \item \textbf{Thread-based chunk parallelism}: boundary instances are split into chunks and distributed through \texttt{ThreadPoolExecutor}.
+  Since SciPy \texttt{cdist} and CatBoost release the GIL during native computation, true concurrency is achieved.
+  Each worker uses \texttt{thread\_count=1} for CatBoost predictions to avoid internal oversubscription (Listing~\ref{lst:bocsor-threads}).
+
+\begin{lstlisting}[style=pipeline,caption={Thread-based chunk parallelism for BoCSoR (\texttt{src/feature\_importance.py}).},label={lst:bocsor-threads}]
+# ThreadPoolExecutor instead of ProcessPoolExecutor: CatBoost.predict()
+# and MLPClassifier.predict() are implemented in C++/Cython and release
+# the GIL, enabling true thread-level concurrency.  ProcessPoolExecutor
+# with fork causes deadlocks on macOS because Apple Accelerate's internal
+# mutex state is duplicated in an inconsistent state by fork().
+with ThreadPoolExecutor(max_workers=n_chunks) as executor:
+    futures = {}
+    for ci, chunk in enumerate(chunks):
+        pc_dists, pc_tops = (precomputed_nn[ci]
+                             if precomputed_nn is not None
+                             else (None, None))
+        futures[executor.submit(
+            _process_boundary_chunk,
+            chunk, X_enc, X_enc_cf, cf_indices,
+            X_train_values, feature_cols, model,
+            k, original_class, cf_nn,
+            pc_dists, pc_tops,
+        )] = chunk
+    for future in as_completed(futures):
+        imp_c, rows_c, dist_c, lab_c, val_c, ncf_c = future.result()
+        # ... aggregate results across chunks ...
+\end{lstlisting}
+
+\end{itemize}
+
+\paragraph{Stage~3 --- Macroscopic ARM.}
+The computational cost of FP-Growth is mitigated by three optimizations:
+\begin{itemize}
+  \item \textbf{Support-level cache}: FP-Growth is executed once per support level in the grid search and reused across confidence levels (Listing~\ref{lst:fpgrowth-cache}).
+  Early termination exploits the anti-monotonicity property: if a support level yields no frequent itemset, all higher support levels are short-circuited.
+
+\begin{lstlisting}[style=pipeline,caption={FP-Growth cache with anti-monotone early termination (\texttt{src/macroscopic\_data\_mining.py}).},label={lst:fpgrowth-cache}]
+freq_cache: dict[float, pd.DataFrame] = {}
+for sup in unique_supports:
+    freq_cache[sup] = _mine_frequent_itemsets(bool_df, min_support=sup)
+    # Monotonicity: if support S yields 0 frequent itemsets, all S' > S
+    # will too.  Short-circuit the remaining (higher) support levels.
+    if freq_cache[sup].empty:
+        for sup2 in unique_supports:
+            if sup2 > sup and sup2 not in freq_cache:
+                freq_cache[sup2] = pd.DataFrame(columns=["support", "itemsets"])
+        break
+\end{lstlisting}
+
+  \item \textbf{Adaptive strategy}: for sparse grids ($\le 500$ rules), a vectorized NumPy-mask approach is used; for denser grids, a \texttt{ThreadPoolExecutor} is used.
+  The crossover threshold is determined empirically by probing the actual rule volume at the lowest support level before starting the grid (Listing~\ref{lst:adaptive-strategy}).
+
+\begin{lstlisting}[style=pipeline,caption={Adaptive strategy selection based on rule volume probing (\texttt{src/macroscopic\_data\_mining.py}).},label={lst:adaptive-strategy}]
+_VECTOR_RULE_THRESHOLD = 500   # rules per support level
+
+# Probe: generate rules at the lowest support and lowest confidence.
+probe_freq = freq_cache[unique_supports[0]]
+if not probe_freq.empty:
+    _probe = association_rules(probe_freq, metric="confidence",
+                               min_threshold=min_confidence)
+    probe_rules_count = len(_probe)
+
+use_vectorised = probe_rules_count <= _VECTOR_RULE_THRESHOLD
+# Vectorised path: association_rules() called once per support level,
+#   per-cell filtering is a single NumPy boolean mask.
+# Parallel path: ThreadPoolExecutor evaluates each (support, confidence)
+#   grid cell concurrently.
+\end{lstlisting}
+
+\end{itemize}
+
+\paragraph{Stage~4 --- Microscopic ARM.}
+The loop over macroscopic rules is parallelized through \texttt{ThreadPoolExecutor}.
+Each macroscopic rule generates an independent filtered transaction set and an independent full grid search.
+This choice is intentional on macOS: it avoids potential deadlocks caused by process forking after BLAS/Apple Accelerate initialization, while still enabling effective concurrency because NumPy, pandas, and \texttt{mlxtend} release the GIL in the dominant native kernels.
+Listing~\ref{lst:micro-parallel} shows the per-rule dispatch with worker budget control.
+
+\begin{lstlisting}[style=pipeline,caption={Parallel per-macro-rule dispatch with oversubscription control (\texttt{src/microscopic\_data\_mining.py}).},label={lst:micro-parallel}]
+n_rules    = len(macro_rules)
+n_parallel = min(n_workers, n_rules)
+inner_workers = max(1, n_workers // max(n_parallel, 1))
+
+with ThreadPoolExecutor(max_workers=n_parallel) as executor:
+    futures = {
+        executor.submit(
+            _run_micro_for_macro_rule,
+            macro_rule=macro_rows[i],
+            label_set=label_sets[i],
+            exploded_tokens=exploded_tokens,   # shared read-only
+            min_support=min_support, max_support=max_support,
+            support_step=support_step,
+            min_confidence=min_confidence, max_confidence=max_confidence,
+            confidence_step=confidence_step,
+            lift_independence_low=lift_independence_low,
+            lift_independence_high=lift_independence_high,
+            n_workers=inner_workers,           # reduced to avoid oversubscription
+        ): i
+        for i in range(n_rules)
+    }
+    for future in as_completed(futures):
+        rules_i, summary_i = future.result()
+        if not rules_i.empty:
+            all_rules_list.append(rules_i)
+\end{lstlisting}
+
+The numbers of parallel workers ($n_{\mathrm{parallel}}$) and inner threads ($n_{\mathrm{inner}}$) are set to avoid oversubscription:
+\[
+  n_{\mathrm{parallel}} \times n_{\mathrm{inner}} \le \texttt{cpu\_count}.
+\]
+Macroscopic rules filtering fewer than 2 transactions are skipped.
+
+\chapter{Pipeline Configuration and Execution}
+\label{app:pipeline-configuration}
+
+\section{Command-Line Interface and Configurations}
+\label{app:cli}
+
+The pipeline is fully configurable through command-line arguments exposed by the module \texttt{src/main.py}.
+For reproducibility and source completeness, all experiments in this thesis use ACS year \texttt{2024}, i.e., the latest release with the full set of required sources available.
+Table~\ref{tab:cli-parameters} summarizes the main parameter groups, default values, and meanings.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Main CLI parameters of the pipeline with default values.}
+\label{tab:cli-parameters}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.26\textwidth} >{\raggedright\arraybackslash}p{0.14\textwidth} >{\raggedright\arraybackslash}p{0.50\textwidth}}
+  \toprule
+  \textbf{Parameter} & \textbf{Default} & \textbf{Description} \\
+  \midrule
+  \multicolumn{3}{l}{\textit{ACS data (stage 1)}} \\
+  \texttt{--years}      & \texttt{2024}     & Survey year(s) (2014--2024); multi-year runs are parallelized \\
+  \texttt{--states}     & \texttt{ALL}      & State codes, regional group (e.g., \texttt{northeast}), or \texttt{ALL} \\
+  \texttt{--horizon}    & \texttt{1-Year}   & Survey horizon (\texttt{1-Year} or \texttt{5-Year}) \\
+  \texttt{--survey}     & \texttt{person}   & Analysis unit (\texttt{person} or \texttt{household}) \\
+  \texttt{--columns}    & \texttt{ALL}      & Features to keep; optional subset \\
+  \texttt{--threshold}  & auto              & Income threshold in \$; auto-selected from Pew if omitted \\
+  \texttt{--seed}       & \texttt{42}       & Seed for train/test split and classifier \\
+  \midrule
+  \multicolumn{3}{l}{\textit{BoCSoR (stage 2)}} \\
+  \texttt{--k}          & \texttt{11}       & Maximum $k$; auto-expanded to odd values up to $k$ \\
+  \texttt{--percentile} & \texttt{20}       & Percentile for boundary-instance selection \\
+  \texttt{--classifier} & \texttt{catboost} & Classifier (\texttt{catboost} or \texttt{mlp}) \\
+  \texttt{--cb-iterations} & \texttt{500}  & Training iterations \\
+  \texttt{--cb-lr}      & \texttt{0.05}     & Learning rate \\
+  \texttt{--cb-depth}   & \texttt{6}        & Tree depth / hidden-layer exponent for MLP \\
+  \texttt{--workers}    & auto              & Workers for multi-year processing \\
+  \midrule
+  \multicolumn{3}{l}{\textit{ARM (stage 3--4)}} \\
+  \texttt{--arm-min-sup\-port}  & \texttt{0.05} & Minimum support for macroscopic FP-Growth (stage 3) \\
+  \texttt{--arm-min-\allowbreak confidence} & \texttt{0.50} & Minimum confidence for macroscopic ARM (stage 3) \\
+  \texttt{--arm-lift-low}       & \texttt{0.75} & Lower threshold of the lift-independence interval \\
+  \texttt{--arm-lift-high}      & \texttt{1.25} & Upper threshold of the lift-independence interval \\
+  \texttt{--arm-sup\-port-step} & auto          & Support-grid step (auto: $\sim$40 levels) \\
+  \shortstack[l]{\texttt{--arm-confidence-}\\\texttt{step}} & auto & Confidence-grid step (auto: $\sim$40 levels) \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+The default configuration (i.e., execution without explicit arguments) corresponds to:
+\begin{itemize}
+  \item ACS 1-Year 2024 dataset over all 49 states (\texttt{ALL});
+  \item all features (\texttt{ALL});
+  \item auto-selected income threshold (\$94,200 for the national scope);
+  \item CatBoost classifier with 500 iterations, learning rate 0.05, depth 6;
+  \item BoCSoR with $k=11$ (auto-expanded to $\{1,3,5,7,9,11\}$) and percentile 20\%;
+  \item ARM with macroscopic thresholds support/confidence = 5\%/50\% (stage 3), microscopic thresholds = 1\%/30\% (stage 4), and lift interval $[0.75,\allowbreak\;1.25]$.
+\end{itemize}
+
+\section{Standalone Execution of Individual Stages}
+\label{app:standalone}
+
+Each module is designed as an independent unit.
+Stages 1 and 2 expose their own CLI and can be executed in standalone mode without using the main module:
+
+\begin{itemize}
+  \item \textbf{Stage~1} (\texttt{python -m src.create\_dataset}): downloads and prepares the dataset independently from subsequent analysis; useful for pre-caching and preprocessing isolation.
+  \item \textbf{Stage~2} (\texttt{python -m src.feature\_importance}): accepts train/test CSV files produced by stage~1 via \texttt{--train} and \texttt{--test} (recommended), or a single unsplit file via \texttt{--dataset} (not recommended, because the split is done internally).
+  This enables rerunning BoCSoR with different parameters without re-downloading data.
+  \item \textbf{Stage~3 and Stage~4} are not standalone: their input paths depend on full pipeline configuration (states, years, columns, threshold, percentile, classifier) and are always invoked by the main module.
+\end{itemize}
+
+\section{Idempotency and Skip-If-Exists Mechanism}
+\label{app:skip-if-exists}
+
+The pipeline is designed to be idempotent: at startup, each stage checks whether its output files already exist in the target directory.
+If so, the stage is fully skipped without recomputation.
+This behavior applies to all four stages:
+
+\begin{itemize}
+  \item \textbf{Stage~1}: if \texttt{dataset\_*.csv}, \texttt{train\_*.csv}, and \texttt{test\_*.csv} exist, download and preprocessing are skipped and files are loaded directly.
+  \item \textbf{Stage~2}: if \texttt{feature\_importance\_class\{0,1\}.csv} exists for one class, that class is skipped while the other is still processed.
+  \item \textbf{Stage~3}: if rule files or sentinel files (\texttt{.arm[suffix]\_done}, created when a $k$ value yields zero rules) exist for a given $k$, that $k$ is skipped.
+  \item \textbf{Stage~4}: if \texttt{micro[suffix]\_rules.csv} exists for a given $k$, that $k$ is skipped.
+\end{itemize}
+
+This mechanism enables restart-safe execution and allows rerunning only stages with changed parameters by deleting the corresponding outputs.
+
+\chapter{Output Artifacts and Reproducibility}
+\label{app:output-artifacts}
+
+\section{Output Structure and Generated Artifacts}
+\label{app:output-structure}
+
+The output layout is designed to guarantee full traceability, modularity, and reproducibility of experiments.
+Instead of emitting a single monolithic file, the pipeline distributes artifacts across a hierarchical directory tree keyed by configuration parameters (e.g., state group, year, income threshold, classifier):
+
+\begin{center}
+\path{results/<states>/<years>/cols<columns>/thr<threshold>/pct<percentile>/<classifier>/}
+\end{center}
+
+In addition to log files (\texttt{pipeline.log}), which track execution timing and accuracy metrics, generated artifacts are organized into three logical categories:
+
+\begin{itemize}
+  \item \textbf{Bridge transactional databases (Itemsets):} itemset CSV files generated in stage~2 act as the bridge between local XAI and global data mining.
+  Relevant features extracted per boundary instance are encoded as textual tokens (e.g., \texttt{SCHL=Bachelors}) and grouped into transactions; these files are then used as direct input for downstream pattern-mining algorithms.
+  \item \textbf{Association metrics and rules:} \path{arm_rules.csv} (stage~3) and \path{micro_rules.csv} (stage~4) are the core analytical outputs.
+  Each row is an extracted rule annotated with formal validation metrics (support, confidence, lift, leverage, conviction) and independence-filter metadata.
+  \path{grid_summary.csv} files track method sensitivity by recording how many rules are discovered in each grid-search cell.
+  \item \textbf{Visual analytics (plots \& heatmaps):} the pipeline automatically generates visual supports for interpretation.
+  Stage~2 produces histograms of decision-boundary distance distributions by rank.
+  Stages~3 and~4 produce heatmaps mapping rule density against grid-search thresholds and lift bins, highlighting the discarded statistical-independence window.
+\end{itemize}
+
+Table~\ref{tab:output-files} summarizes the main files produced at the end of a full run.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Pipeline output files by stage and logical category.}
+\label{tab:output-files}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.08\textwidth} >{\raggedright\arraybackslash}p{0.40\textwidth} >{\raggedright\arraybackslash}p{0.42\textwidth}}
+  \toprule
+  \textbf{Stage} & \textbf{File / Path} & \textbf{Content / Description} \\
+  \midrule
+  2 & \path{bocsor_label_importance.csv}        & Aggregated BoCSoR index by feature (macro level). \\
+  2 & \path{bocsor_value_importance.csv}        & Aggregated BoCSoR index by category (micro level). \\
+  2 & \path{feature_importance_itemsets.csv}    & Transactions aggregated across all $k$ values (ARM input). \\
+  2 & \path{feature_importance_itemsets_k{N}.csv} & Transactional database for a specific neighborhood $k$. \\
+  2 & \path{bocsor_distances.csv}                & Instance-counterfactual distances by rank. \\
+  2 & \path{plots/bocsor_distance_histograms_per_rank.png} & Distance-histogram grid by rank. \\
+  2 & \path{bocsor_summary.md}                   & Textual summary report (local XAI). \\
+  \midrule
+  3 & \path{association_rules/k{N}/arm_rules.csv}         & Macroscopic ARM rules for neighborhood $k$. \\
+  3 & \path{association_rules/k{N}/arm_grid_summary.csv} & Macroscopic grid-search statistics. \\
+  3 & \path{association_rules/k{N}/heatmaps/*.png}         & Macroscopic heatmaps (support, confidence, lift). \\
+  3 & \path{association_rules/all_k/arm_rules_all_k.csv} & Macroscopic rules aggregated across all $k$. \\
+  \midrule
+  4 & \path{association_rules/k{N}/micro/micro_rules.csv} & Microscopic ARM rules anchored to macro rules. \\
+  4 & \path{association_rules/k{N}/micro/micro_grid_summary.csv} & Microscopic grid-search statistics. \\
+  4 & \path{association_rules/k{N}/micro/heatmaps/*.png}   & Microscopic heatmaps (support, confidence, lift). \\
+  4 & \path{association_rules/all_k/micro/micro_rules_all_k.csv} & Microscopic rules aggregated across all $k$. \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\chapter{Software Stack and Scalability}
+\label{app:software-stack}
+
+\section{Libraries, Frameworks and Implementation Choices}
+\label{app:libraries-frameworks}
+
+The software implementation relies on a consolidated ecosystem of open-source libraries for data analysis and scientific computing in Python~3.10.
+Framework selection is driven by the need to process efficiently datasets with over one million instances.
+
+Beyond standard data-manipulation (\texttt{pandas}, \texttt{numpy}) and visualization stacks (\texttt{matplotlib}, \texttt{seaborn}), the system uses \texttt{folktables} for standardized extraction of ACS census microdata and \texttt{mlxtend} for efficient FP-Growth execution in pattern mining.
+For classification and counterfactual-neighborhood analysis, the framework integrates \texttt{scikit-learn} (including Manhattan kNN distance computation via \texttt{scipy.spatial.distance.cdist}) and \texttt{catboost}, optimized for tabular learning with categorical variables.
+
+A critical implementation aspect is the parallelization strategy, designed to mitigate CPython's Global Interpreter Lock (GIL).
+To achieve this, a hybrid parallelization strategy is adopted:
+\begin{itemize}
+  \item \textbf{ThreadPoolExecutor:} used extensively not only for I/O-bound tasks (e.g., data download in stage~1), but also for compute-heavy kernels. This is possible because libraries such as NumPy, pandas, and mlxtend release the GIL while executing C/Cython-native code. Stage~1 uses this executor to parallelize variable categorization; stage~4 uses it to iterate concurrently over macroscopic rules. Using threads in stage~4 is essential on macOS to prevent deadlocks caused by system-mutex duplication (Apple Accelerate/BLAS) in multiprocess \texttt{fork()} scenarios.
+  \item \textbf{ProcessPoolExecutor (with \texttt{spawn} start method):} reserved for purely isolated CPU-bound tasks, such as parallel processing of different census years in stage~1, where independent Python interpreter instances are required without shared memory.
+\end{itemize}
+
+Table~\ref{tab:libraries} summarizes the main dependencies and their scope across pipeline stages.
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Libraries and frameworks used in the pipeline.}
+\label{tab:libraries}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth} p{0.50\textwidth} p{0.16\textwidth}}
+  \toprule
+  \textbf{Library} & \textbf{Primary Use} & \textbf{Stage} \\
+  \midrule
+  \texttt{folktables}         & ACS microdata download and supervised-task definition. & 1 \\
+  \texttt{pandas}             & Vectorized tabular processing and CSV I/O.            & 1, 2, 3, 4 \\
+  \texttt{numpy}              & Hybrid encoding, boolean matrices, vectorized masks.  & 1, 2, 3, 4 \\
+  \texttt{scipy}              & Manhattan \texttt{cdist} (fast brute-force kNN backend). & 2 \\
+  \texttt{scikit-learn}       & \texttt{NearestNeighbors}, \texttt{MLPClassifier}, data split. & 2 \\
+  \texttt{catboost}           & Gradient-boosting classifier for tabular data.        & 2 \\
+  \texttt{mlxtend}            & FP-Growth and association-rule generation (ARM).      & 3, 4 \\
+  \texttt{matplotlib} \& \texttt{seaborn} & Distance histograms and grid-search heatmaps. & 2, 3, 4 \\
+  \texttt{concurrent.\allowbreak futures} & \texttt{ThreadPoolExecutor} for GIL-releasing kernels and macOS deadlock prevention. & 1, 2, 3, 4 \\
+  \texttt{multiprocessing}    & \texttt{spawn} start-method configuration for \texttt{ProcessPoolExecutor}. & 1 \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\section{Parallelism Summary by Stage}
+\label{app:parallelism-summary}
+
+Table~\ref{tab:parallelism} summarizes the type of parallelism adopted for each pipeline component.
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Parallelization mechanisms by stage.}
+\label{tab:parallelism}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth} p{0.31\textwidth} p{0.35\textwidth}}
+  \toprule
+  \textbf{Component} & \textbf{Mechanism} & \textbf{Motivation} \\
+  \midrule
+  State download          & \texttt{ThreadPoolExecutor}   & I/O-bound (network) \\
+  Column categorization   & \texttt{ThreadPoolExecutor}   & NumPy/pandas release GIL \\
+  CSV write               & \texttt{ThreadPoolExecutor}   & I/O-bound (3 threads) \\
+  Multi-year              & \texttt{ProcessPoolExecutor}  & CPU-bound (\texttt{spawn}) \\
+  BoCSoR boundary sel.    & \texttt{NearestNeighbors}     & Multi-core via joblib (\texttt{n\_jobs=-1}) \\
+  BoCSoR chunks           & \texttt{ThreadPoolExecutor}   & GIL released by SciPy/CatBoost \\
+  ARM macro (grid search) & \texttt{ThreadPoolExecutor}   & Adaptive; \texttt{mlxtend} releases GIL \\
+  ARM macro (per-$k$)     & \texttt{ThreadPoolExecutor}   & Independent per-$k$ workloads \\
+  ARM micro (per-rule)    & \texttt{ThreadPoolExecutor}   & Avoids macOS fork/BLAS deadlocks \\
+  ARM micro (per-$k$)     & \texttt{ThreadPoolExecutor}   & Independent per-$k$ workloads \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\section{Scalability and Hardware Requirements}
+\label{app:scalability}
+
+The pipeline is designed to be portable and hardware-agnostic.
+The number of workers is auto-detected (default: $\texttt{cpu\_count}-2$, capped at 14), and the only requirement is enough RAM to hold the encoded matrix and nearest-neighbor index.
+For the national dataset ($\sim\!1.4$M instances $\times$ 147 encoded columns), observed peak memory usage is about 6~GB (measured on Apple M1 Ultra with the national dataset), which is compatible with systems equipped with 8~GB RAM or more, although 16~GB is recommended to ensure operational headroom.
+\chapter{Experimental Data and Classifier Performance}
+\label{app:experimental-data}
+
+\section{Classifier Accuracy}
+\label{app:classifier-accuracy}
+
+Table~\ref{tab:classifier-accuracy} reports the accuracy achieved by both classifiers on each of the five benchmark datasets. The values correspond to the configurations used throughout the experimental evaluation (default hyperparameters, percentile $P = 20\%$). CatBoost consistently outperforms MLP by approximately two to three percentage points, confirming its suitability for categorical tabular data. Both classifiers achieve accuracy above $80\%$ on all benchmarks, which validates that the decision boundaries being analyzed by the pipeline correspond to a reasonably well-performing predictor.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Classifier accuracy on the five benchmark datasets (train / test).}
+\label{tab:classifier-accuracy}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.20\textwidth} p{0.16\textwidth} p{0.16\textwidth} p{0.16\textwidth} p{0.16\textwidth}}
+  \toprule
+  \textbf{Scope} & \multicolumn{2}{c}{\textbf{CatBoost}} & \multicolumn{2}{c}{\textbf{MLP}} \\
+  \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+  & Train & Test & Train & Test \\
+  \midrule
+  ALL       & 0.849 & 0.849 & 0.826 & 0.826 \\
+  NY        & 0.841 & 0.834 & 0.814 & 0.814 \\
+  TX        & 0.858 & 0.851 & 0.836 & 0.833 \\
+  Northeast & 0.857 & 0.852 & 0.835 & 0.834 \\
+  South     & 0.847 & 0.844 & 0.824 & 0.825 \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+The small gap between training and test accuracy in all cases (less than one percentage point) indicates that neither classifier exhibits significant overfitting. This is important for the validity of the BoCSoR analysis, which operates on the training set to explain the learned decision boundary: a severely overfitting model would produce boundary patterns that do not generalize to unseen data.
+
+\section{Dataset Statistics after Preprocessing}
+\label{app:dataset-stats}
+
+Table~\ref{tab:dataset-stats} reports the composition of the ALL benchmark after the $80\%/20\%$ train--test split. Class~0 (below-threshold income) constitutes approximately $76\%$ of the training instances, reflecting the natural class imbalance in the ACS income distribution. The boundary instances selected at percentile $P = 25\%$ represent the fraction of each class closest to the decision boundary; as expected, the class~0 boundary pool is larger in absolute terms due to the underlying class imbalance.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Composition of the ALL benchmark dataset (ACS 2024, threshold \$94,200).}
+\label{tab:dataset-stats}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.50\textwidth} p{0.20\textwidth}}
+  \toprule
+  \textbf{Metric} & \textbf{Value} \\
+  \midrule
+  Total records (after task filter) & 1,753,048 \\
+  Training set & 1,402,438 \\
+  Test set & 350,610 \\
+  Features & 10 \\
+  Income threshold & \$94,200 \\
+  \midrule
+  Class~0 (correctly classified, train) & 1,014,983 \\
+  Class~1 (correctly classified, train) & 316,571 \\
+  Class ratio (class~0 / class~1) & $\sim$3.2\,:\,1 \\
+  \midrule
+  Boundary instances, class~0 ($P = 25\%$) & 255,388 \\
+  Boundary instances, class~1 ($P = 25\%$) & 69,403 \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\section{Example of Pipeline Output}
+\label{app:example-output}
+
+To illustrate the concrete output of the pipeline, this section presents one example of a BoCSoR transaction and its downstream association-rule interpretation.
+
+\paragraph{Example transaction.} Consider boundary instance $\tilde{\mathbf{x}}_{8332}$ (class~0, Texas, CatBoost, $k = 15$). After the substitution test across all $15$ counterfactuals, the union of relevant feature-category pairs yields the following transaction:
+
+\[
+\mathcal{L}_{8332} = \left\{ \begin{array}{l}
+\texttt{AGEP=Experienced},\; \texttt{RAC1P=Two-Or-\allowbreak More-Races},\\
+\texttt{SCHL=GED-Or-Alt-Credential},\; \texttt{WKHP=Over-Full-Time}
+\end{array} \right\}
+\]
+
+This transaction indicates that, for this particular boundary instance, the classifier's prediction of below-threshold income depends on the joint presence of these four category values: mid-to-late career age, multiracial identity, GED-level education, and extended working hours. Changing any one of these values in the counterfactual is sufficient to flip the prediction.
+
+\paragraph{Macroscopic projection.} At the macroscopic level, the transaction $\mathcal{L}_{8332}$ is projected to the feature-name set $\mathcal{M}_{8332} = \{\texttt{AGEP}, \texttt{RAC1P}, \texttt{SCHL}, \texttt{WKHP}\}$. This set participates in multiple macroscopic rules, including $\texttt{RAC1P} \Rightarrow \texttt{OCCP}$ (biased) and $\texttt{SCHL} \Rightarrow \texttt{WKHP}$ (other). The fact that \texttt{RAC1P} appears in this transaction contributes to the support count of the biased macroscopic rules.
+
+\paragraph{Microscopic expansion.} For a macroscopic biased rule such as $\texttt{RAC1P} \Rightarrow \texttt{OCCP}$, the microscopic analysis would filter all transactions containing both a \texttt{RAC1P=*} token and an \texttt{OCCP=*} token, and would then mine value-level rules within that subset. Transaction $\mathcal{L}_{8332}$ would contribute to this analysis because it contains \texttt{RAC1P=Two-Or-\allowbreak More-Races}. However, it would not directly contribute to the specific micro rule
+\[
+\texttt{OCCP=Office-And-Administrative-Support} \Rightarrow \texttt{RAC1P=Two-Or-More-Races}
+\]
+unless its OCCP value matched.

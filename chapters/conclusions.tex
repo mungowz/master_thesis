@@ -1,0 +1,54 @@
+% !TEX root = ../main.tex
+
+\section{Conclusions}
+\label{sec:conclusions-summary}
+
+This work proposed and evaluated a pipeline for extracting global, human-interpretable explanations of tabular classifiers through the combination of boundary-based counterfactual feature importance and hierarchical Association Rule Mining. The pipeline was applied to five geographical benchmarks derived from the 2024 American Community Survey, with two structurally different classifiers and a systematic grid search over support and confidence thresholds.
+
+The empirical evaluation produced several findings that, taken together, support the usefulness of the proposed approach. At the macroscopic level, the pipeline surfaced a consistent structural vocabulary: $\texttt{COW} \Rightarrow \texttt{OCCP}$ for actionable rules and $\texttt{RAC1P} \Rightarrow \texttt{OCCP}$ for biased rules, both present in all five scopes. At the same time, the ratio between actionable and biased rules varied systematically with the socio-economic profile of the benchmark, ranging from $1.3\times$ in the Northeast to $11.8\times$ in the South at support $\geq 0.05$. This geographic asymmetry is one of the most robust signals documented in this work: it persists across thresholds, classifiers, and parameter settings.
+
+The decay analysis refined this picture. Actionable rules are statistically more robust than biased rules in New York and the Northeast, where they survive at higher support thresholds; biased rules are more robust in Texas and the South, where they persist up to support $\geq 0.20$ and $\geq 0.10$ respectively. The national benchmark (ALL) exhibits the weakest signal, confirming that aggregating heterogeneous populations dilutes locally identifiable patterns.
+
+The microscopic analysis provided the semantic depth that macroscopic patterns cannot supply on their own. In Texas, the dominant actionable pattern materializes as public-sector employment in educational occupations (\texttt{COW=Local-Government-Employee} $\Rightarrow$ \texttt{OCCP=Educational-Instruction-And-Library}, support $0.271$); the dominant biased pattern combines the same occupational signature with \texttt{SEX=Female}, producing the profile of the female public-school teacher. In New York, biased rules describe white women in office work living as biological daughters, with lift values up to $7.64$. In the South, only one microscopic biased rule survives the quality filters, $\texttt{POBP=Georgia} \Rightarrow \texttt{RAC1P=Black-Or-African-American-Alone}$, which is the concrete expression of the unique macroscopic pattern $\texttt{RAC1P} \Rightarrow \texttt{POBP}$ distinctive to that benchmark.
+
+A further finding concerns the asymmetry between the two classes. Actionable and biased rules dominate the boundary toward lower income (class~0) in all scopes. Rules on the boundary toward higher income (class~1) are observed only in New York, only at $k \in \{13, 15\}$, and at low support (around $0.05$), but they reach very high lift values ($5.0$ to $5.8$), indicating rare but strongly non-random patterns in the only benchmark where the upper-income regime produces detectable structure.
+
+Overall, the pipeline operationalizes a principled separation between merit-based and demographically-entangled decision patterns, without committing to a single fairness metric and without making causal claims. The hierarchical design proved essential: macroscopic rules identified the structural skeleton, and microscopic rules revealed the specific demographic profiles animating it. Neither level alone would have been sufficient.
+
+\section{Limitations}
+\label{sec:conclusions-limitations}
+
+The approach has limitations that should be made explicit.
+
+\paragraph{Descriptive, not causal.} The analysis is purely associational. The labels ``actionable'' and ``biased'' are operational categories defined with respect to feature content, not claims about the causal structure of the classifier or about actual discrimination. Verifying that a biased rule corresponds to a causally discriminatory mechanism would require domain-level assessment by qualified experts and a causal-inference framework outside the scope of the thesis.
+
+\paragraph{Boundary-focused.} The pipeline analyzes only instances close to the decision boundary, selected via a percentile threshold on counterfactual distance. This restriction is methodologically motivated (the boundary is where the classifier exhibits the highest uncertainty and therefore the most informative behavior) but implies that patterns confined to the interior of the class regions are not captured. Instances well inside the class-0 or class-1 region do not contribute to the extracted rules.
+
+\paragraph{Dataset and domain specificity.} The experimental evaluation is limited to the 2024 ACS Income task and to five U.S.\ geographical benchmarks. Other Folktables tasks (public coverage, mobility, employment), other census years, other countries, and other socio-demographic domains have not been tested. The specific patterns documented here (e.g., the $\texttt{RAC1P} \Rightarrow \texttt{POBP}$ pattern in the South) are therefore context-dependent and should not be extrapolated without re-validation.
+
+\paragraph{Classifier families.} The validation relies on two classifier families (CatBoost and MLP). Transformer-based tabular models (for example TabTransformer, FT-Transformer) and other architectures with substantially different inductive biases have not been examined. Although the pipeline is model-agnostic by construction, its behavior on such architectures remains an empirical question.
+
+\paragraph{Information loss from categorization.} Continuous features (age, working hours) are discretized prior to the rule mining stages. This simplifies the combinatorial structure of the transaction database but loses fine-grained information. A finer bin structure, or a direct handling of mixed-type features in the rule mining itself, could in principle surface patterns that the current categorization obscures.
+
+\paragraph{Threshold sensitivity.} The number of surviving rules depends strongly on the support, confidence, and lift thresholds chosen for filtering. The grid search mitigates this dependency by providing a landscape view, but it does not remove it. Reporting patterns that persist across multiple threshold combinations is a partial remedy; a fully threshold-free characterization of rule stability remains open.
+
+\section{Future Work}
+\label{sec:conclusions-future}
+
+Several directions extend the work presented here.
+
+\paragraph{Cross-task and cross-country replication.} A natural next step is to apply the pipeline to the other Folktables tasks (\texttt{ACSPublicCoverage}, \texttt{ACSMobility}, \texttt{ACSEmployment}, \texttt{ACSTravelTime}) and to census systems outside the United States where comparable microdata are available. Such replication would test the generality of the geographic asymmetry documented here and establish whether the $\texttt{RAC1P} \Rightarrow \texttt{POBP}$ pattern is specific to the U.S.\ South or emerges in analogous socio-economic settings elsewhere.
+
+\paragraph{Temporal analysis.} Running the pipeline across multiple ACS release years would make it possible to track the evolution of actionable and biased patterns over time, detecting drift in the classifier's decision logic as the underlying population evolves. This is particularly relevant for fairness monitoring in production systems, where retraining introduces new boundary patterns that may differ from those validated at deployment.
+
+\paragraph{Integration with causal inference.} The descriptive rules produced by the pipeline can serve as hypotheses for subsequent causal analysis. Methods such as do-calculus on the feature graph or interventional feature attribution could be applied to the variable interactions surfaced by the biased rules, converting associational findings into causal claims where the data-generating process is sufficiently well understood.
+
+\paragraph{Bias-mitigation strategies guided by the extracted rules.} Once a set of biased rules has been identified, it can serve as a targeted intervention map. Rather than applying a global fairness constraint, one could remove or reweight the specific transaction sub-populations that instantiate the biased rules and retrain the classifier, assessing whether the pipeline no longer surfaces those rules in the retrained model. This would close the loop between explanation and mitigation.
+
+\paragraph{Transformer-based tabular models.} Applying the pipeline to TabTransformer, FT-Transformer, SAINT, or similar architectures would test whether the structural patterns documented here (in particular $\texttt{COW} \Rightarrow \texttt{OCCP}$ and $\texttt{RAC1P} \Rightarrow \texttt{OCCP}$) are properties of the data or artifacts of the specific inductive biases of CatBoost and MLP.
+
+\paragraph{Integration with formal fairness metrics.} The semantic classification of rules is deliberately independent of traditional fairness metrics (demographic parity, equalized odds, predictive parity). Connecting the two perspectives, for example by computing the contribution of each biased rule to a given disparity measure, would provide a quantitative bridge between rule-based and metric-based fairness analysis.
+
+\paragraph{Threshold-free pattern characterization.} An appealing extension is to replace the current support--confidence grid search with a threshold-free ranking of rule stability, for instance by aggregating persistence across the full parameter landscape. This would eliminate the residual dependence on threshold choices and provide a single scalar measure of confidence per rule.
+
+Taken together, these directions suggest that the proposed pipeline is best viewed not as a final artifact but as a reusable methodology: a way of organizing the interpretation of tabular classifiers that can be instantiated in many domains, time periods, and model families, and that produces outputs amenable to both qualitative inspection and quantitative downstream analysis.

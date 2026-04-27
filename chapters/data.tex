@@ -1,0 +1,264 @@
+% !TEX root = ../main.tex
+
+\section{Dataset Construction Overview}
+This chapter describes how the reference dataset is constructed, including data sources, integration steps, and quality-control choices. The goal is to provide a transparent and reproducible description of the data pipeline used in this thesis.
+
+\section{Limitations of Common Tabular Benchmarks}
+\label{sec:benchmark-limitations}
+
+This work focuses on the analysis of \emph{tabular} datasets, that is, datasets organized as rows of instances and columns of structured variables. In the fairness and explainability literature, empirical evaluation on tabular data has often relied on a relatively small set of reference benchmarks, most notably Adult and COMPAS, together with a few other recurring resources such as German Credit. Their popularity has made them useful as common points of comparison, but the literature increasingly stresses that they should not be treated as neutral or universally representative benchmarks.
+
+A first issue concerns \emph{dataset size and empirical coverage}. By empirical coverage we mean the extent to which a dataset captures the diversity of cases, populations, and decision contexts that a method may encounter in practice. A benchmark has limited empirical coverage when it represents only a narrow slice of the relevant reality, for example because it is small, historically dated, geographically restricted, or based on a reduced set of variables. The methodological problem is that results obtained in such a setting can appear stronger and more stable than they actually are: a model may perform well only because the benchmark excludes many of the variations, edge cases, and structural heterogeneities present in real applications. In the specific case of Adult, the dataset is derived from a 1994 U.S. Census extract and contains fewer than fifty thousand instances, with only fourteen input features and a small set of protected attributes. As discussed by \textcite{ding2021retiring}, this historical and structural narrowness contributes to limited external validity, especially when modern fairness claims are generalized beyond the specific benchmark setting. The official UCI documentation also makes clear that Adult is a reasonably clean extract built from a much older census source and includes missing values in multiple categorical fields, which further highlights its constrained and partially incomplete nature \cite{kohavi1996adult}.
+
+A second issue concerns \emph{anonymization, proxy structure, and limited semantic richness}. These concepts are related but distinct. By anonymization we mean the removal, aggregation, or masking of information that could identify individuals or institutions. Although this is necessary for privacy protection, it also removes context that may be crucial for understanding how the data were produced. By proxy structure we mean the presence of variables that, even if not explicitly sensitive themselves, may indirectly encode information about protected characteristics; for example, occupation, education, place of residence, or prior institutional contact may function as correlates of race, gender, or socioeconomic status. By limited semantic richness we mean that the variables and accompanying documentation are too sparse to reconstruct the substantive meaning of the observed attributes, labels, and exclusions. The practical consequence is that the analyst may not know what a variable truly measures, how a target label was generated, whether a feature acts as a hidden proxy for a sensitive attribute, or which social processes are missing from the dataset representation. As argued by \textcite{fabris2022story}, this is a broader problem in algorithmic-fairness datasets: anonymization, limited transparency, and weak documentation can obscure how sensitive attributes are encoded, how labels are produced, and what kinds of population exclusions or distortions are embedded in the data. In practice, this means that a benchmark may remain convenient for methodological comparison while still being poorly suited for substantive claims about fairness in realistic socio-technical settings.
+
+A third issue concerns \emph{missing data, coding artifacts, and preprocessing errors}. While interconnected, these operational issues manifest differently in practice. Missing data are absent values in the table; the problem is not only the loss of information, but also the possibility that missingness is systematic and therefore introduces distortion. Coding artifacts are distortions produced by the way variables are encoded, discretized, cleaned, or exported, rather than by the underlying phenomenon itself. Preprocessing errors arise when undocumented transformations, merge decisions, label constructions, or cleaning steps alter the meaning of the data before analysis. These issues matter because downstream model performance and fairness assessments may then reflect properties of the benchmark construction rather than genuine methodological robustness. For Adult, missing categorical entries are part of the original resource \cite{kohavi1996adult}. For COMPAS, the critique is stronger: \textcite{bao2021compaslicated} argue that the benchmark abstraction hides substantial measurement bias and contextual complexity, making the dataset a poor fit for fairness benchmarking under assumptions of clean ground truth. More broadly, \textcite{fabris2022story} note that several widely used fairness benchmarks suffer from noisy data, severe coding mistakes, aging, and contrived prediction tasks, all of which call into question their role as general-purpose reference datasets.
+
+These limitations do not imply that benchmark datasets such as Adult or COMPAS are useless. Rather, they indicate that results obtained on them must be interpreted cautiously and should not be overextended as evidence of robustness in realistic operational settings. This observation supports the motivation of the present thesis. Instead of relying only on small and highly reused benchmark datasets, the thesis is developed around a larger real-world tabular setting, where issues such as incompleteness, heterogeneity, semantic ordering, and data quality are treated as part of the methodological problem rather than abstracted away. In this sense, the choice of a large-scale census-based tabular dataset is not merely an application choice, but also a response to the limitations documented in the benchmark literature.
+
+\section{From UCI Adult to Folktables: A Modern Census Alternative}
+\label{sec:adult-to-folktables}
+Since the empirical focus of this thesis is grounded in census data, it is necessary to examine the specific shortcomings of the UCI Adult dataset, which has long served as the \emph{de facto} standard for tabular machine learning and fairness evaluation. Derived from the 1994 Current Population Survey, Adult formulates a binary classification task asking whether an individual's income exceeds \$50,000. However, as comprehensively detailed by \textcite{ding2021retiring}, this specific formulation presents severe structural weaknesses for modern evaluation. First, the 1994 income threshold is highly outdated and no longer reflects meaningful socioeconomic boundaries without adjusting for inflation. Second, the dataset includes obscure coding artifacts, most notably the \texttt{fnlwgt} (final weight) feature. This variable was originally designed by the Census Bureau as a demographic multiplier to align the sample with aggregate population estimates, yet it is frequently and erroneously treated as a standard predictive feature in the machine learning literature. Finally, its fixed, single-year snapshot prevents any localized analysis, forcing researchers to evaluate fairness and explainability on a static and geographically monolithic population.
+
+To overcome these criticalities, this thesis adopts the \emph{Folktables} framework introduced by \textcite{ding2021retiring} and available through the official Folktables repository \cite{folktablesrepo}. Folktables is not a single static dataset, but rather an open-source algorithmic interface that provides direct, reproducible access to the American Community Survey (ACS) Public Use Microdata Sample (PUMS) data made available by the US Census Bureau through its official ACS PUMS portal \cite{acspumsportal}. Instead of relying on a single, outdated historical threshold, Folktables allows researchers to synthesize datasets based on recent years and defines multiple standardized prediction tasks such as predicting employment status, medical coverage, or specific income percentiles. Furthermore, it supports state-level geographical stratification, meaning that data can be tailored to capture localized demographic distributions rather than relying on a generalized national average.
+
+The transition from Adult to Folktables represents a methodological upgrade that closely aligns with the objectives of this work. By building the reference dataset through the Folktables API, the data-construction pipeline gains access to a significantly larger pool of instances, a more semantically rich set of contemporary features, and a transparent data-generation process. This transparent, large-scale environment is particularly well-suited for the proposed Association-Rule Mining (ARM) approach: the clarity, diversity, and reliability of the ACS features ensure that the extracted rules whether they capture global feature importance or potential algorithmic bias are grounded in meaningful socio-demographic realities rather than historical artifacts.
+
+\section{The Folktables Framework}
+\label{sec:folktables-framework}
+The reference dataset used in this thesis is constructed through the \texttt{folktables} API, which operationalizes supervised-learning tasks from ACS PUMS microdata in a reproducible and standardized way \cite{ding2021retiring,folktablesrepo,acspumsportal}. These underlying ACS PUMS data are distributed by the US Census Bureau in an already anonymized public-use form, so that the \texttt{folktables} framework works on data that have already undergone disclosure-limitation procedures before entering the present pipeline. This does not eliminate the interpretive limitations associated with anonymization discussed in Section~\ref{sec:benchmark-limitations}, but it makes the provenance and institutional status of the anonymization process explicit from the outset. The main advantage of \texttt{folktables} is that it does not provide a single fixed table, but rather a configurable interface through which the researcher can choose the task, the filtering rule, the geographic scope, and the survey release used to instantiate the final analytical dataset.
+
+The framework exposes multiple predefined ACS tasks that have become common reference points in the recent fairness literature. Each task corresponds to a distinct prediction problem built from ACS variables and labels. In the specific case of \texttt{ACSIncome}, the task is formulated as a binary classification problem in which the target indicates whether individual personal income lies below or above a given threshold. Table~\ref{tab:folktables-topics} summarizes the main topics provided by the framework together with their corresponding prediction targets.
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\caption{Summary of the main \texttt{folktables} topics and their associated prediction tasks.}
+\label{tab:folktables-topics}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\textwidth} p{0.26\textwidth} p{0.30\textwidth}}
+  \toprule
+  \textbf{Topic} & \textbf{Prediction target} & \textbf{Task meaning} \\
+  \midrule
+  \texttt{ACSIncome} & Personal income threshold & Predict whether annual personal income exceeds a specified threshold. \\
+  \texttt{ACSPublicCoverage} & Public health coverage & Predict whether a person is covered by public insurance. \\
+  \texttt{ACSMobility} & Residential mobility & Predict whether a person changed residence within the last year. \\
+  \texttt{ACSEmployment} & Employment status & Predict whether a person is employed. \\
+  \texttt{ACSTravelTime} & Commute-time threshold & Predict whether travel time to work exceeds a threshold. \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+In addition to task choice, \texttt{folktables} also makes explicit the sample restrictions associated with each problem formulation. This is an important advantage over many benchmark datasets, because it clarifies which observations are retained, which are excluded, and under which assumptions the learning problem is defined. Table~\ref{tab:folktables-filters} summarizes the main filters associated with the best-known \texttt{folktables} topics.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Main \texttt{folktables} topics and associated preprocessing filters.}
+\label{tab:folktables-filters}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\textwidth} p{0.60\textwidth}}
+  \toprule
+  \textbf{Topic} & \textbf{Filter conditions} \\
+  \midrule
+  \texttt{ACSIncome} (\texttt{adult\_filter}) & Individuals older than 16, with positive usual working hours and personal income above a minimum threshold. \\
+  \texttt{ACSPublicCoverage} & Individuals selected according to the public-coverage task definition implemented by \texttt{folktables}. \\
+  \texttt{ACSMobility} & Individuals retained according to the mobility-task filter defined in the framework. \\
+  \texttt{ACSEmployment} & Working-age individuals retained by the employment-task filter. \\
+  \texttt{ACSTravelTime} & Employed individuals retained by the travel-time task filter. \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+Taken together, these options make \texttt{folktables} more transparent and configurable than traditional fixed benchmarks. The researcher can specify not only the target problem, but also the population slice on which that problem is instantiated, thereby making the data-construction logic an explicit part of the documented methodology rather than an implicit preprocessing detail.
+
+\section{Sources and Downloaded Data}
+\label{sec:dataset-preparation}
+
+Within this broader framework, the analytical dataset is instantiated by selecting the \texttt{ACSIncome} task. In \texttt{folktables}, \texttt{ACSIncome} is the task that formulates income prediction as a binary classification problem derived from ACS variables, where the target indicates whether an individual's personal income exceeds the threshold defined by the task specification. This choice preserves continuity with the income-prediction setting historically associated with Adult while replacing the older benchmark with a more recent and better documented census source. The dataset is generated by applying the standard \texttt{adult\_filter} used by \texttt{folktables}, which retains individuals older than 16 with positive weekly working hours and personal income above a minimum reporting threshold. In addition, records with null values are excluded from the analytical table, and duplicate observations are removed during raw-data acquisition and assembly. Using this predefined filter improves comparability with prior work while avoiding ad hoc sample restrictions at the data-construction stage.
+
+The data-construction pipeline relies entirely on the 2024 ACS release. This year was selected because it is the most recent ACS release for which the required data are available in a sufficiently complete form for the present study. Starting from this common source, the pipeline generates five dataset instances corresponding to the five geographical benchmark groups considered in the thesis: the New York metropolitan area, Texas, the U.S. Northeast, the U.S. South, and the set of all U.S. states except Alaska. The two regional benchmarks follow the standard Census geography. More precisely, the Northeast comprises Maine, New Hampshire, Vermont, Massachusetts, Rhode Island, Connecticut, New Jersey, New York, and Pennsylvania, whereas the South comprises Delaware, Maryland, the District of Columbia, Virginia, West Virginia, North Carolina, South Carolina, Georgia, Florida, Kentucky, Tennessee, Alabama, Mississippi, Arkansas, Louisiana, Oklahoma, and Texas \cite{censusregions}.
+
+For this analysis, the New York metropolitan area and Texas are treated as small-scale benchmarks, while the Northeast and the South are used as medium-scale benchmarks. This choice is motivated not only by dataset size, but also by the intention to compare the proposed pipeline across socio-economically contrasting settings. The New York benchmark is intended to capture a dense metropolitan context; this interpretation is coherent with the Census definition of a metropolitan statistical area as a territorially integrated area organized around a large urban core and its commuting ties \cite{censusmetroglossary}. Within this comparative design, New York is used as the more affluent and urbanized pole of the small-scale comparison, while Texas is used as the contrasting benchmark. This characterization is supported, at the state level, by Census indicators reporting higher median household income and lower poverty in New York than in Texas \cite{quickfactsny,quickfactstx}. The same logic guides the regional comparison: the Northeast is used as the more affluent benchmark, whereas the South is used as the contrasting benchmark. This choice is consistent with Census regional profile data for the Northeast and with recent Census evidence showing that sustained high-poverty counties are concentrated disproportionately in the South \cite{censusnortheastprofile,censussouthpoverty}.
+
+Finally, the benchmark including all U.S. states except Alaska serves as the large-scale reference dataset. In the 2024 instantiation used in this thesis, the five benchmark datasets contain between 106,877 and 1,753,049 records after applying the \texttt{ACSIncome} task filter and then selecting the corresponding geographic benchmark. By contrast, the corresponding ACS 2024 extraction used in the project contains 2,956,351 records in total before benchmark-specific geographic selection. Table~\ref{tab:dataset-cardinality} summarizes the cardinality of each dataset.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Number of records in the five benchmark datasets and in the full ACS 2024 extraction.}
+\label{tab:dataset-cardinality}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.42\textwidth} p{0.24\textwidth}}
+  \toprule
+  \textbf{Dataset} & \textbf{Number of records} \\
+  \midrule
+  New York metropolitan area & 106,877 \\
+  Texas & 145,670 \\
+  U.S. Northeast & 308,138 \\
+  U.S. South & 642,617 \\
+  All U.S. states except Alaska & 1,753,049 \\
+  Full ACS 2024 extraction & 2,956,351 \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+Taken together, these five datasets are used not only to assess the thesis pipeline under different input sizes, but also to compare its behavior across tabular settings that differ in distributional structure, sparsity, demographic composition, and overall socio-economic profile. 
+
+\subsection{Synthetic Data Augmentation via Diffusion Models}
+\label{sec:synthetic-augmentation}
+
+The final datasets used in this thesis are not limited to the original ACS records selected through the pipeline described above. After the raw extraction and cleaning stage, and before the categorization steps applied to the analytical table, the data are augmented with synthetic samples in order to increase empirical variability and reduce the risk that the downstream analysis reflects only the specific realization of the observed census slice. This augmentation is performed on the pre-categorized table, that is, when the data still contain both numerical and categorical columns in their original mixed-type form. Consequently, the synthetic-generation stage takes place before the categorization of continuous variables discussed in Section~\ref{sec:discretization} and before the aggregation of the occupational code \texttt{OCCP} described in Section~\ref{sec:occp}.
+
+To generate synthetic records, the pipeline adopts a diffusion-based tabular generator inspired by \textcite{shi2025tabdiff}. TabDiff is specifically designed for mixed-type tabular data and models numerical and categorical attributes jointly while preserving their distinct statistical nature. Its main methodological advantage, for the purposes of this thesis, is that the forward diffusion and reverse denoising dynamics are not imposed uniformly on the whole table. Instead, they are adapted feature-wise, so that each column can follow a diffusion process coherent with its own distributional properties. This is particularly useful in the present setting, where the raw ACS table combines continuous quantities such as age, hours worked, and income with categorical variables characterized by heterogeneous cardinalities and highly non-uniform empirical frequencies. According to the authors, TabDiff introduces a joint continuous-time diffusion framework for numerical and categorical data, with feature-wise learnable diffusion processes designed to account for the heterogeneity of different columns \cite{shi2025tabdiff}.
+
+From an operational perspective, the synthetic generator is used as a data-augmentation component rather than as a replacement for the original sample. The objective is not to create an alternative benchmark disconnected from the observed ACS distribution, but to enrich the available training data with additional plausible records that preserve the structural dependencies among variables while increasing the diversity of the resulting dataset. For this reason, the augmentation is inserted at the raw-data level, before the handcrafted transformations that are specific to the analytical pipeline. This design ensures that the subsequent categorization, occupational aggregation, train--test split, and rule-mining stages are applied uniformly to both original and synthetic records.
+
+The quality of the generated data is assessed by comparing the synthetic tables with the corresponding original tables along two complementary dimensions. First, the correlation structure of the variables is analyzed to verify that the synthetic data preserve the main inter-feature dependencies present in the original observations. More precisely, the comparison is based on both Pearson correlation and Spearman rank correlation, to evaluate preservation of linear dependence as well as monotonic dependence. Second, fairness-related metrics are computed on the original and generated data and then compared to evaluate whether the synthetic augmentation alters the sensitive structure of the benchmark. In particular, the fairness assessment considers False Positive Error Rate Balance, False Negative Error Rate Balance (equivalently discussed in relation to Equal Opportunity), Equalized Odds, and Overall Accuracy Equality. Preliminary evaluations confirmed that the synthetic data remain closely aligned with the original data: both the correlation patterns and the considered fairness indicators are similar, and in several cases effectively indistinguishable, between the two sources. This empirical similarity supports the use of the augmented datasets as a faithful extension of the original ACS-derived benchmarks rather than as a distributionally shifted surrogate.
+
+\section{Dataset Composition and Feature Schema}
+\label{sec:dataset-columns}
+
+All five benchmark datasets share the same column structure defined by the \texttt{ACSIncome} task. Since \texttt{ACSIncome} is formulated as a binary classification problem, each resulting table comprises both a set of inputs and a target label. The attributes included across all datasets are \texttt{AGEP} (age), \texttt{COW} (class of worker), \texttt{SCHL} (educational attainment), \texttt{MAR} (marital status), \texttt{OCCP} (occupation code), \texttt{POBP} (place of birth), \texttt{RELP} (relationship to the household reference person), \texttt{WKHP} (weekly working hours), \texttt{SEX} (reported sex), and \texttt{RAC1P} (reported race). Alongside these predictors is a binary outcome derived from \texttt{PINCP} (individual income). The complete feature schema and variable characteristics are summarized in Table~\ref{tab:acsincome-feature-schema}.
+
+These attributes, however, are not treated uniformly throughout the data pipeline. Depending on their source format and functional role, numerical variables may be categorized, while categorical ones require harmonization and profiling. Furthermore, some features preserve an ordinal interpretation, whereas others are explicitly designated as protected, contextual, or actionable during the experimental phase. 
+
+The following sections provide a detailed description of each attribute's meaning, its role within the explanatory framework, and the specific data preparation operations applied, including categorization criteria and source definitions. These structural choices directly inform both the methodological approach described in Chapter~\ref{cap:method} and the experimental evaluations discussed in Chapter~\ref{cap:results}. Ultimately, these procedures ensure internal coherence while bolstering the reliability and interpretability of the downstream analysis.
+
+Following the application of the standard task filter and the aforementioned processing steps, each of the five tabular datasets is partitioned into training and test subsets using an 80\%/20\% split. This configuration serves as the foundation for the subsequent predictive and explanatory evaluations.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Summary schema of the main variables in the selected \texttt{ACSIncome} task.}
+\label{tab:acsincome-feature-schema}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.16\textwidth} p{0.24\textwidth} p{0.50\textwidth}}
+  \toprule
+  \textbf{Column} & \textbf{Type} & \textbf{Summary description} \\
+  \midrule
+  \texttt{AGEP}  & Numerical (then discretized) & Individual age. \\
+  \texttt{WKHP}  & Numerical (then discretized) & Weekly hours worked. \\
+  \texttt{COW}   & Categorical & Class of worker (for example private, public, or self-employed). \\
+  \texttt{SCHL}  & Ordinal categorical & Educational attainment. \\
+  \texttt{MAR}   & Categorical & Marital status. \\
+  \texttt{OCCP}  & Encoded categorical & Occupation code. \\
+  \texttt{POBP}  & Encoded categorical & Place of birth. \\
+  \texttt{RELP}  & Categorical & Relationship to household reference person. \\
+  \texttt{SEX}   & Binary categorical & Reported sex in the ACS coding scheme. \\
+  \texttt{RAC1P} & Categorical & Reported race in the ACS coding scheme. \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\subsection{Income Binarization Threshold}
+The target variable of our dataset is derived from \texttt{PINCP}, the ACS variable corresponding to individual personal income, through the binary task definition associated with \texttt{ACSIncome}. Within the \texttt{folktables} interface, \texttt{PINCP} is binarized into the values $0$ and $1$ on the basis of an income threshold, here denoted by $\theta$. In its standard configuration, $\theta$ is set at \$50,000, thereby preserving continuity with the classical UCI Adult formulation, although it can in principle be redefined by the user at dataset-construction time. Under this encoding, value $0$ corresponds to the lower-income class, whereas value $1$ identifies the medium-to-higher-income class.
+
+For the reasons discussed in the previous sections, the standard \$50,000 threshold is not suitable for any of the five datasets considered in this thesis, since it does not adequately reflect either the geographic heterogeneity of the selected areas or the socioeconomic conditions of the reference year 2024. We therefore adopt a territory-specific threshold that remains coherent with the economic conditions of 2024 and can be applied directly to individual income.
+
+More precisely, we follow the criterion adopted by the Pew Research Center to identify the point at which an individual enters the middle-to-upper-income class. According to this criterion, an individual belongs to the middle-to-upper-income class when income reaches at least twice the mean individual income of the territory under analysis, here denoted by $M_{\mathrm{ind}}$~\cite{pew2024middleclassmethodology,kochhar2022pew}. Operationally, in our datasets, $M_{\mathrm{ind}}$ is computed directly from the raw \texttt{PINCP} values extracted through \texttt{folktables}, since \texttt{PINCP} records the individual personal income associated with each observation. The threshold is therefore defined as
+$$
+  \theta \;=\; 2 \cdot M_{\mathrm{ind}},
+$$
+and is interpreted as the minimum individual income required for an observation to be assigned to the middle-to-upper-income class in the corresponding geographic context. Table~\ref{tab:income-thresholds} summarizes the resulting threshold values used for the five datasets considered in this thesis.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Income binarization thresholds adopted for the five datasets considered in this thesis.}
+\label{tab:income-thresholds}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.34\textwidth} p{0.26\textwidth}}
+  \toprule
+  \textbf{Dataset} & \textbf{Threshold $\theta$} \\
+  \midrule
+  \texttt{ALL} & \$94{,}200 \\
+  \texttt{Northeast} & \$100{,}700 \\
+  \texttt{South} & \$86{,}000 \\
+  \texttt{NY} & \$94{,}400 \\
+  \texttt{TX} & \$90{,}800 \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\subsection{Categorization of Continuous Features}
+\label{sec:discretization}
+Among the variables extracted into our datasets, two features, \texttt{AGEP} (age) and \texttt{WKHP} (weekly hours worked), are numerical in their raw form. However, unlike purely nominal variables, both exhibit an intrinsic order relation among their values: for example, an age value of 20 denotes a lower age than a value of 50, and 20 weekly working hours denote a shorter schedule than 50 hours. To align these variables with the rest of the dataset and to represent them in a format directly manageable by the ARM pipeline, we transform them into ordinal categorical features through categorization. This choice is also consistent with the treatment of numerical variables formalized in the dedicated section of Chapter~\ref{cap:method}. The two originally numerical features, \texttt{AGEP} and \texttt{WKHP}, are therefore categorized into ordinal categorical bands before being introduced into the pipeline. The grouping strategy is anchored to official labor-statistics conventions. For age, we align the boundaries with the standard groups commonly reported in BLS Current Population Survey tabulations (16--24, 25--34, 35--44, 45--54, 55--64, 65+)~\cite{bls2026cpsa3}. For weekly hours, we rely on the concepts and definitions adopted by the U.S. Bureau of Labor Statistics (BLS) for the Current Population Survey, in particular the distinction between part-time and full-time work based on the 35-hour threshold(1--19, 20--34, 35--40, 41--49, 50--59, 60+)~\cite{bls2025cpsconcepts}. The resulting categories adopted for \texttt{AGEP} and \texttt{WKHP} are reported in Tables~\ref{tab:agep-bands} and~\ref{tab:wkhp-bands}.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Categorization bands adopted for \texttt{AGEP}.}
+\label{tab:agep-bands}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth} p{0.50\textwidth}}
+  \toprule
+  \textbf{Band} & \textbf{Interpretation} \\
+  \midrule
+  16--24 & Young workers (Young Workers) \\
+  25--34 & Early career (Early Career) \\
+  35--44 & Mid-career (Mid Career) \\
+  45--54 & Established career (Established Career) \\
+  55--64 & Pre-retirement (Pre-Retirement) \\
+  65--95 & Retirement/post-career (Retirement Age) \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Categorization bands adopted for \texttt{WKHP}.}
+\label{tab:wkhp-bands}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.24\textwidth} p{0.50\textwidth}}
+  \toprule
+  \textbf{Band} & \textbf{Interpretation} \\
+  \midrule
+  1--19 & Reduced part-time (Part-Time) \\
+  20--34 & Extended part-time (Reduced Hours) \\
+  35--40 & Standard full-time (Full-Time) \\
+  41--49 & Full-time with overtime (Full-Time+) \\
+  50--59 & Extended hours (Extended Hours) \\
+  60+ & Intensive schedule (Very Long Hours) \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+\subsection{Aggregation of Occupational Codes (\texttt{OCCP})}
+\label{sec:occp}
+
+In ACS microdata, feature \texttt{OCCP} is represented as a four-digit numerical code derived from the Bureau of Labor Statistics Standard Occupational Classification (SOC)~\cite{bls2023oews}. With over 500 distinct codes, direct use would produce excessive cardinality for the analysis. Codes are therefore aggregated into the 23 main occupational groups (major groups) defined by the BLS OEWS classification, e.g., Management, Computer and Mathematical, and Healthcare Practitioners and Technical.
+
+Mapping is performed through binary search (\texttt{np.searchsorted}) on contiguous code ranges associated with each group, with per-row complexity $O(\log n)$, which is relevant for 1M+ row datasets. Non-classifiable codes are assigned to category Not-In-Labor-Force-Or-Unclassified.
+
+\subsection{Remaining Categorical Features}
+\label{sec:remaining-features}
+
+The remaining features in the dataset are used as provided by the ACS, with no categorization or aggregation beyond mapping raw census codes to human-readable labels. Table~\ref{tab:remaining-features} summarizes each variable, its type, and its cardinality.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\caption{Categorical features used without further categorization.}
+\label{tab:remaining-features}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.12\textwidth} >{\raggedright\arraybackslash}p{0.16\textwidth} p{0.08\textwidth} p{0.50\textwidth}}
+  \toprule
+  \textbf{Column} & \textbf{Type} & \textbf{Levels} & \textbf{Description} \\
+  \midrule
+  \texttt{SCHL} & Ordinal categorical & 24 & Educational attainment, from No Schooling Completed through Doctorate Degree. The intrinsic ordering is preserved and used in the ordinal encoding described in Chapter~\ref{cap:method}. \\
+  \texttt{COW} & Nominal categorical & 9 & Class of worker, covering private for-profit, private not-for-profit, local/state/federal government, self-employed (incorporated and not), family business, and not working. \\
+  \texttt{MAR} & Nominal categorical & 5 & Marital status: married, widowed, divorced, separated, and never married (or under 15 years). \\
+  \texttt{RELP} & Nominal categorical & 17 & Relationship to the household reference person, e.g., reference person, spouse, biological child, adopted child, foster child, grandchild, other relative, roomer/boarder, housemate/roommate, and unmarried partner. The ACS variable was renamed from \texttt{RELSHIPP} to \texttt{RELP} starting in survey year 2019; the pipeline handles both naming conventions transparently. \\
+  \texttt{SEX} & Binary categorical & 2 & Reported sex: Male and Female, as coded in the ACS. \\
+  \texttt{RAC1P} & Nominal categorical & 9 & Reported race: White Alone, Black or African American Alone, American Indian Alone, Alaska Native Alone, American Indian and Alaska Native combined, Asian Alone, Native Hawaiian and Other Pacific Islander Alone, Some Other Race Alone, and Two or More Races. \\
+  \texttt{POBP} & Nominal categorical & ${\sim}150$ & Place of birth, encoded as U.S.\ state names for domestic-born individuals and country names for foreign-born individuals, following ACS FIPS and country-code mappings. Due to its high cardinality, this feature contributes a proportionally larger number of dimensions in the one-hot encoded representation used for distance computation. \\
+  \bottomrule
+\end{tabular}
+\renewcommand{\arraystretch}{1.0}
+\end{table}
+
+Among these, \texttt{SCHL} is the only ordinal feature: its 24 levels reflect an increasing educational attainment scale. The remaining features (\texttt{COW}, \texttt{MAR}, \texttt{RELP}, \texttt{SEX}, \texttt{RAC1P}, \texttt{POBP}) are nominal, meaning their categories carry no intrinsic ordering. This distinction directly determines which encoding strategy is applied in the hybrid distance formulation described in Chapter~\ref{cap:method}: ordinal features receive rank-based min-max normalized encoding, while nominal features receive scaled one-hot encoding.
+
+From the perspective of the experimental analysis presented in Chapter~\ref{cap:results}, the features are further classified into two semantic groups. \emph{Actionable features} are those whose values a person can, at least in principle, modify through individual effort or choice: educational attainment (\texttt{SCHL}), class of worker (\texttt{COW}), weekly working hours (\texttt{WKHP}), and occupation (\texttt{OCCP}). \emph{Sensitive features} are those that encode demographic characteristics typically protected by anti-discrimination legislation: sex (\texttt{SEX}) and race (\texttt{RAC1P}). This classification is used in the post-analysis stage to distinguish between association rules that reflect merit-based patterns and those that may indicate bias in the model's decision logic.
