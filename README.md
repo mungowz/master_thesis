@@ -64,6 +64,65 @@ Key findings:
 
 ## Related Work
 
+- **Foundational paper:** A. L. Alfeo, A. G. Zippo, V. Catrambone, M. G. C. A. Cimino, N. Toschi, G. Valenza. *From local counterfactuals to global feature importance: efficient, robust, and model-agnostic explanations for brain connectivity networks*. **Computer Methods and Programs in Biomedicine**, vol. 236, 2023, art. 107550. [[DOI]](https://doi.org/10.1016/j.cmpb.2023.107550) — introduces the original **BoCSoR** measure for continuous data, which this thesis adapts to fully categorical tabular data.
+- **Source code:** [mungowz/arm-counterfactual-features](https://github.com/mungowz/arm-counterfactual-features) — the full 4-stage Python pipeline implementing the methodology described here.
+- **Supervisor:** Prof. Antonio Maratea
+- **Examiner:** Prof. Francesco Camastra
+
+## Citation
+
+If this work is useful for your research, please consider citing:
+
+```bibtex
+@mastersthesis{mungari2026biasdetection,
+  author  = {Mungari, Alfredo},
+  title   = {Feature-Driven Bias Detection: An Association Rule Mining
+             Approach to Analyze Feature Importance},
+  school  = {University of Naples "Parthenope"},
+  year    = {2026},
+  type    = {Master's Thesis},
+  address = {Naples, Italy}
+}
+```
+
+## Author
+
+**Alfredo Mungari**
+[GitHub](https://github.com/mungowz) · [LinkedIn](https://www.linkedin.com/in/alfredo-mungari-99ab9225a) · [ResearchGate](https://www.researchgate.net/profile/Alfredo-Mungari-2)
+
+## License
+
+The thesis content is released under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — feel free to share and adapt for non-commercial purposes with attribution.- The **South uniquely exhibits a race-geography pattern** (`RAC1P ⇒ POBP`) that does not emerge as dominant elsewhere.
+- Rules at the **higher-income boundary** emerge only in New York, and only for broad counterfactual neighborhoods.
+
+## Contributions
+
+1. Adaptation of the **BoCSoR** method to fully categorical data.
+2. **Hierarchical (macroscopic / microscopic) mining design** for global rule extraction.
+3. **Conservative semantic classification** of rules into *actionable* vs *biased*.
+4. **Empirical characterization** of geographic bias asymmetries across five U.S. Census benchmarks.
+
+## Repository Structure
+
+```
+.
+├── main.tex                # Thesis root document
+├── master_thesis.pdf       # Compiled thesis PDF
+├── chapters/               # Individual chapter sources
+│   ├── introduction.tex
+│   ├── state_of_the_art.tex
+│   ├── data.tex
+│   ├── method.tex
+│   ├── results.tex
+│   ├── conclusions.tex
+│   └── appendix.tex
+├── bibliography.bib        # References
+├── assets/                 # Figures and images
+└── presentation/           # Defense presentation (LaTeX + PDF)
+```
+
+## Related Work
+
 - **Source code:** [mungowz/arm-counterfactual-features](https://github.com/mungowz/arm-counterfactual-features) — the full 4-stage Python pipeline implementing the methodology described here.
 - **Supervisor:** Prof. Antonio Maratea
 - **Examiner:** Prof. Francesco Camastra
